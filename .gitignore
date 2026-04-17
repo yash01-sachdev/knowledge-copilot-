@@ -1,0 +1,8 @@
+.venv/
+apps/web/node_modules/
+apps/web/.next/
+apps/web/coverage/
+data/
+*.log
+__pycache__/
+*.pyc

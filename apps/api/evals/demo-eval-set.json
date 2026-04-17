@@ -1,0 +1,278 @@
+[
+  {
+    "case_id": "interview-01",
+    "category": "interview-prep",
+    "question": "What helps interview prep when I feel scattered?",
+    "expect_answer": true,
+    "expected_note_titles": ["Interview prep reset", "When I feel stuck"]
+  },
+  {
+    "case_id": "interview-02",
+    "category": "interview-prep",
+    "question": "How should I structure an interview prep day?",
+    "expect_answer": true,
+    "expected_note_titles": ["Interview prep reset"]
+  },
+  {
+    "case_id": "interview-03",
+    "category": "interview-prep",
+    "question": "What makes my interview confidence go up?",
+    "expect_answer": true,
+    "expected_note_titles": ["Interview prep reset"]
+  },
+  {
+    "case_id": "interview-04",
+    "category": "interview-prep",
+    "question": "What should I do when I feel scattered during prep?",
+    "expect_answer": true,
+    "expected_note_titles": ["Interview prep reset", "When I feel stuck"]
+  },
+  {
+    "case_id": "interview-05",
+    "category": "interview-prep",
+    "question": "How do I win interview prep?",
+    "expect_answer": true,
+    "expected_note_titles": ["Interview prep reset", "Career notes after a mock interview"]
+  },
+  {
+    "case_id": "stuck-01",
+    "category": "stuck-loop",
+    "question": "Why do I feel stuck?",
+    "expect_answer": true,
+    "expected_note_titles": ["When I feel stuck"]
+  },
+  {
+    "case_id": "stuck-02",
+    "category": "stuck-loop",
+    "question": "What is the fix when there are too many options?",
+    "expect_answer": true,
+    "expected_note_titles": ["When I feel stuck"]
+  },
+  {
+    "case_id": "stuck-03",
+    "category": "stuck-loop",
+    "question": "What helps more than waiting to feel motivated?",
+    "expect_answer": true,
+    "expected_note_titles": ["When I feel stuck"]
+  },
+  {
+    "case_id": "stuck-04",
+    "category": "stuck-loop",
+    "question": "How do I get unstuck with one small task?",
+    "expect_answer": true,
+    "expected_note_titles": ["When I feel stuck"]
+  },
+  {
+    "case_id": "career-01",
+    "category": "career",
+    "question": "What did the interviewer like in my mock interview?",
+    "expect_answer": true,
+    "expected_note_titles": ["Career notes after a mock interview"]
+  },
+  {
+    "case_id": "career-02",
+    "category": "career",
+    "question": "Why is hybrid retrieval better than pure vector search for messy notes?",
+    "expect_answer": true,
+    "expected_note_titles": ["Career notes after a mock interview"]
+  },
+  {
+    "case_id": "career-03",
+    "category": "career",
+    "question": "How should I describe a project in interviews?",
+    "expect_answer": true,
+    "expected_note_titles": ["Career notes after a mock interview"]
+  },
+  {
+    "case_id": "career-04",
+    "category": "career",
+    "question": "What is my strongest career angle?",
+    "expect_answer": true,
+    "expected_note_titles": ["Career notes after a mock interview"]
+  },
+  {
+    "case_id": "energy-01",
+    "category": "energy",
+    "question": "What repeated pattern affects how steady I feel?",
+    "expect_answer": true,
+    "expected_note_titles": ["Energy patterns from journaling"]
+  },
+  {
+    "case_id": "energy-02",
+    "category": "energy",
+    "question": "What do low energy days mention in my journal?",
+    "expect_answer": true,
+    "expected_note_titles": ["Energy patterns from journaling"]
+  },
+  {
+    "case_id": "energy-03",
+    "category": "energy",
+    "question": "What do better days usually mention?",
+    "expect_answer": true,
+    "expected_note_titles": ["Energy patterns from journaling"]
+  },
+  {
+    "case_id": "energy-04",
+    "category": "energy",
+    "question": "What beats intensity for me?",
+    "expect_answer": true,
+    "expected_note_titles": ["Energy patterns from journaling"]
+  },
+  {
+    "case_id": "project-01",
+    "category": "project-selection",
+    "question": "What kind of project is best for my resume?",
+    "expect_answer": true,
+    "expected_note_titles": ["Project selection thoughts"]
+  },
+  {
+    "case_id": "project-02",
+    "category": "project-selection",
+    "question": "Why is a knowledge copilot a good project?",
+    "expect_answer": true,
+    "expected_note_titles": ["Project selection thoughts"]
+  },
+  {
+    "case_id": "project-03",
+    "category": "project-selection",
+    "question": "What should the MVP stay narrow on?",
+    "expect_answer": true,
+    "expected_note_titles": ["Project selection thoughts"]
+  },
+  {
+    "case_id": "project-04",
+    "category": "project-selection",
+    "question": "Why do I not want a shallow chatbot project?",
+    "expect_answer": true,
+    "expected_note_titles": ["Project selection thoughts"]
+  },
+  {
+    "case_id": "momentum-01",
+    "category": "momentum",
+    "question": "How do I recover momentum quickly?",
+    "expect_answer": true,
+    "expected_note_titles": ["What helps me recover momentum"]
+  },
+  {
+    "case_id": "momentum-02",
+    "category": "momentum",
+    "question": "Why do old notes help me restart?",
+    "expect_answer": true,
+    "expected_note_titles": ["What helps me recover momentum"]
+  },
+  {
+    "case_id": "momentum-03",
+    "category": "momentum",
+    "question": "What should I do after reading relevant notes?",
+    "expect_answer": true,
+    "expected_note_titles": ["What helps me recover momentum"]
+  },
+  {
+    "case_id": "momentum-04",
+    "category": "momentum",
+    "question": "What happens when I skip the last step after reading old notes?",
+    "expect_answer": true,
+    "expected_note_titles": ["What helps me recover momentum"]
+  },
+  {
+    "case_id": "cross-01",
+    "category": "cross-note",
+    "question": "What patterns keep repeating in my notes?",
+    "expect_answer": true,
+    "expected_note_titles": [
+      "Interview prep reset",
+      "When I feel stuck",
+      "Energy patterns from journaling",
+      "What helps me recover momentum"
+    ],
+    "minimum_relevant_citations": 2
+  },
+  {
+    "case_id": "cross-02",
+    "category": "cross-note",
+    "question": "Based on my notes, what usually helps me recover momentum?",
+    "expect_answer": true,
+    "expected_note_titles": [
+      "What helps me recover momentum",
+      "When I feel stuck",
+      "Interview prep reset"
+    ]
+  },
+  {
+    "case_id": "cross-03",
+    "category": "cross-note",
+    "question": "What should I focus on for a good GenAI project?",
+    "expect_answer": true,
+    "expected_note_titles": [
+      "Project selection thoughts",
+      "Career notes after a mock interview",
+      "Interview prep reset"
+    ]
+  },
+  {
+    "case_id": "cross-04",
+    "category": "cross-note",
+    "question": "What gives me steady energy and consistent shipping?",
+    "expect_answer": true,
+    "expected_note_titles": [
+      "Energy patterns from journaling",
+      "What helps me recover momentum"
+    ]
+  },
+  {
+    "case_id": "negative-01",
+    "category": "no-answer",
+    "question": "What did I write about relationships?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-02",
+    "category": "no-answer",
+    "question": "What do my notes say about cooking dinner?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-03",
+    "category": "no-answer",
+    "question": "What is my plan for investing money?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-04",
+    "category": "no-answer",
+    "question": "What did I write about football?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-05",
+    "category": "no-answer",
+    "question": "Which camera should I buy?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-06",
+    "category": "no-answer",
+    "question": "What is my travel plan for Japan?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-07",
+    "category": "no-answer",
+    "question": "How should I train for a marathon?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  },
+  {
+    "case_id": "negative-08",
+    "category": "no-answer",
+    "question": "What do I think about buying a new phone?",
+    "expect_answer": false,
+    "expected_note_titles": []
+  }
+]

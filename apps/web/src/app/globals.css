@@ -1,0 +1,248 @@
+@import "tailwindcss";
+
+:root {
+  --font-plex-sans: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-plex-mono: "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+  --background: #081018;
+  --background-deep: #050a11;
+  --foreground: #f3eee6;
+  --panel: rgba(12, 21, 33, 0.9);
+  --panel-soft: rgba(16, 28, 43, 0.92);
+  --panel-strong: rgba(8, 17, 27, 0.95);
+  --border: rgba(154, 173, 193, 0.16);
+  --muted: #96a8bc;
+  --accent: #83e1c5;
+  --accent-strong: #56c8a7;
+  --accent-soft: rgba(131, 225, 197, 0.14);
+  --warm: #f2b06b;
+  --warm-soft: rgba(242, 176, 107, 0.14);
+  --success: #58d1aa;
+  --warning: #f7c96b;
+  --danger: #ff928b;
+  --shadow: 0 30px 80px rgba(1, 6, 14, 0.42);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-panel-soft: var(--panel-soft);
+  --color-panel-strong: var(--panel-strong);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-warm: var(--warm);
+  --color-warm-soft: var(--warm-soft);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: auto;
+}
+
+body {
+  position: relative;
+  overflow-x: hidden;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(242, 176, 107, 0.16), transparent 28%),
+    radial-gradient(circle at 84% 4%, rgba(131, 225, 197, 0.14), transparent 24%),
+    linear-gradient(180deg, #071019 0%, #08121d 42%, #081019 100%);
+  color: var(--foreground);
+  font-family: var(--font-plex-sans), sans-serif;
+}
+
+body::before,
+body::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: auto;
+  z-index: -2;
+  border-radius: 9999px;
+  filter: blur(26px);
+  opacity: 0.75;
+}
+
+body::before {
+  left: -10rem;
+  top: -8rem;
+  height: 28rem;
+  width: 28rem;
+  background: radial-gradient(circle, rgba(242, 176, 107, 0.22) 0%, rgba(242, 176, 107, 0) 70%);
+}
+
+body::after {
+  right: -8rem;
+  top: 2rem;
+  height: 22rem;
+  width: 22rem;
+  background: radial-gradient(circle, rgba(131, 225, 197, 0.2) 0%, rgba(131, 225, 197, 0) 72%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(131, 225, 197, 0.28);
+}
+
+.panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(20px);
+}
+
+.panel-soft {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0)),
+    var(--panel-soft);
+  border: 1px solid var(--border);
+}
+
+.panel-strong {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0)),
+    var(--panel-strong);
+  border: 1px solid var(--border);
+}
+
+.mono {
+  font-family: var(--font-plex-mono), monospace;
+}
+
+.page-frame {
+  width: 100%;
+  padding-top: 0.75rem;
+}
+
+.subtle-grid {
+  background-image:
+    linear-gradient(rgba(154, 173, 193, 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(154, 173, 193, 0.07) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.app-mesh {
+  background-image:
+    linear-gradient(rgba(154, 173, 193, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(154, 173, 193, 0.05) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent 88%);
+}
+
+.kicker {
+  font-family: var(--font-plex-mono), monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.button-primary {
+  border-radius: 1rem;
+  background: linear-gradient(135deg, var(--accent), var(--warm));
+  color: #071018;
+  font-weight: 700;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    filter 160ms ease;
+  box-shadow: 0 12px 28px rgba(86, 200, 167, 0.18);
+}
+
+.button-primary:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.02);
+}
+
+.button-secondary {
+  border-radius: 1rem;
+  border: 1px solid rgba(154, 173, 193, 0.18);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--foreground);
+  font-weight: 600;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+
+.button-secondary:hover {
+  transform: translateY(-1px);
+  border-color: rgba(131, 225, 197, 0.34);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.button-ghost {
+  border-radius: 9999px;
+  border: 1px solid rgba(154, 173, 193, 0.14);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--muted);
+  transition:
+    border-color 160ms ease,
+    color 160ms ease,
+    background 160ms ease;
+}
+
+.button-ghost:hover {
+  border-color: rgba(131, 225, 197, 0.28);
+  color: var(--foreground);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.field-input,
+.field-textarea {
+  width: 100%;
+  border-radius: 1.2rem;
+  border: 1px solid rgba(154, 173, 193, 0.16);
+  background: rgba(8, 16, 24, 0.72);
+  color: var(--foreground);
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.field-input:focus,
+.field-textarea:focus {
+  border-color: rgba(131, 225, 197, 0.42);
+  box-shadow: 0 0 0 4px rgba(131, 225, 197, 0.08);
+  background: rgba(8, 16, 24, 0.9);
+}
+
+.metric-card {
+  border-radius: 1.5rem;
+  border: 1px solid rgba(154, 173, 193, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
+    rgba(7, 14, 23, 0.7);
+}
+
+.warm-rule {
+  height: 1px;
+  width: 100%;
+  background: linear-gradient(90deg, rgba(242, 176, 107, 0), rgba(242, 176, 107, 0.55), rgba(242, 176, 107, 0));
+}
