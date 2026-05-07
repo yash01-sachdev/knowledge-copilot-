@@ -180,3 +180,4 @@ That means the current v1 is ready for a production-style local run today, and c
 For the next meaningful step after deployment, see:
 
 - `docs/roadmap.md`
+# knowledge-copilot-
