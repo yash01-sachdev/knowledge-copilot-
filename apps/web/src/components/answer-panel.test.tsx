@@ -56,12 +56,13 @@ const answer: QueryResponse = {
   confidence_label: "high",
   insufficient_evidence: false,
   diagnostics: {
+    query_mode: "quality",
     retrieval_latency_ms: 12,
     rerank_latency_ms: 4,
     generation_latency_ms: 28,
     total_latency_ms: 44,
     semantic_mode: "local-tfidf",
-    reranker_mode: "local-heuristic",
+    reranker_mode: "local-smart:quality",
     answer_provider: "local:heuristic",
     citation_count: 1,
     insufficient_evidence: false,
@@ -88,6 +89,7 @@ describe("AnswerPanel", () => {
     expect(screen.getAllByText(/Recovering momentum/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Open memory page/i)).toBeInTheDocument();
     expect(screen.getByText(/1 active links/i)).toBeInTheDocument();
+    expect(screen.getByText(/quality mode/i)).toBeInTheDocument();
     expect(screen.getByText(/high confidence/i)).toBeInTheDocument();
     expect(screen.getByText(/Run details/i)).toBeInTheDocument();
     expect(screen.getByText(/Semantic search/i)).toBeInTheDocument();

@@ -69,7 +69,7 @@ describe("MemoryGraph", () => {
 
     render(<MemoryGraph nodes={nodes} links={links} fetchNoteDetail={fetchNoteDetail} />);
 
-    expect(screen.getByText(/Trace a memory thread/i)).toBeInTheDocument();
+    expect(screen.getByText(/Interactive map/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText(/Inspect note Recovering momentum/i));
     expect(fetchNoteDetail).toHaveBeenCalledWith("note-1");
@@ -91,16 +91,16 @@ describe("MemoryGraph", () => {
     expect(
       screen
         .getAllByTestId("memory-graph-canvas")
-        .some((canvas) => canvas.getAttribute("class")?.includes("h-140")),
+        .some((canvas) => canvas.getAttribute("class")?.includes("h-[620px]")),
     ).toBe(true);
 
-    fireEvent.click(screen.getAllByRole("button", { name: /Immersive/i })[0]);
+    fireEvent.click(screen.getAllByRole("button", { name: /Open fullscreen/i })[0]);
 
     await waitFor(() => {
       expect(
         screen
           .getAllByTestId("memory-graph-canvas")
-          .some((canvas) => canvas.getAttribute("class")?.includes("h-[980px]")),
+          .some((canvas) => canvas.getAttribute("class")?.includes("h-[calc(100vh-220px)]")),
       ).toBe(true);
     });
   });

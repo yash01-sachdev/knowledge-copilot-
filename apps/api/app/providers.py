@@ -86,18 +86,21 @@ class LocalAnswerProvider:
         )
 
 
-class LocalRerankerProvider:
-    provider_name = "local"
-    model_name = "heuristic"
+class _HttpProviderBase:
+    def __init__(
+        self,
+        *,
+        model_name: str,
+        base_url: str,
+        timeout_seconds: float,
+        http_client: httpx.Client | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self._base_url = base_url.rstrip("/")
+        self._client = http_client or httpx.Client(timeout=timeout_seconds)
 
-    def rerank(self, request: RerankRequest) -> list[RerankResult]:
-        return [
-            RerankResult(chunk_id=item.chunk_id, score=item.current_score)
-            for item in request.items
-        ]
 
-
-class OpenAIEmbeddingProvider:
+class _OpenAIProviderBase(_HttpProviderBase):
     provider_name = "openai"
 
     def __init__(
@@ -109,10 +112,50 @@ class OpenAIEmbeddingProvider:
         timeout_seconds: float,
         http_client: httpx.Client | None = None,
     ) -> None:
-        self.model_name = model_name
+        super().__init__(
+            model_name=model_name,
+            base_url=base_url,
+            timeout_seconds=timeout_seconds,
+            http_client=http_client,
+        )
         self._api_key = api_key
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client or httpx.Client(timeout=timeout_seconds)
+
+    def _post_responses_task(self, *, system_prompt: str, user_prompt: str) -> str:
+        response = self._client.post(
+            f"{self._base_url}/responses",
+            headers=_build_openai_headers(self._api_key),
+            json=_build_openai_responses_payload(
+                model_name=self.model_name,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            ),
+        )
+        response.raise_for_status()
+        return _extract_openai_output_text(response.json())
+
+
+class _OllamaProviderBase(_HttpProviderBase):
+    provider_name = "ollama"
+
+    def _post_chat_task(self, *, system_prompt: str, user_prompt: str, temperature: float) -> str:
+        response = self._client.post(
+            f"{self._base_url}/api/chat",
+            json=_build_ollama_chat_payload(
+                model_name=self.model_name,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=temperature,
+            ),
+        )
+        response.raise_for_status()
+        payload = response.json()
+        content = payload.get("message", {}).get("content", "")
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("Ollama response did not include any assistant content.")
+        return content
+
+
+class OpenAIEmbeddingProvider(_OpenAIProviderBase):
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -120,10 +163,7 @@ class OpenAIEmbeddingProvider:
 
         response = self._client.post(
             f"{self._base_url}/embeddings",
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=_build_openai_headers(self._api_key),
             json={
                 "model": self.model_name,
                 "input": texts,
@@ -138,20 +178,7 @@ class OpenAIEmbeddingProvider:
         return embeddings
 
 
-class OllamaEmbeddingProvider:
-    provider_name = "ollama"
-
-    def __init__(
-        self,
-        *,
-        model_name: str,
-        base_url: str,
-        timeout_seconds: float,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self.model_name = model_name
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client or httpx.Client(timeout=timeout_seconds)
+class OllamaEmbeddingProvider(_OllamaProviderBase):
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
         if not texts:
@@ -181,166 +208,46 @@ class OllamaEmbeddingProvider:
         return legacy_embeddings
 
 
-class OpenAIAnswerProvider:
-    provider_name = "openai"
-
-    def __init__(
-        self,
-        *,
-        api_key: str,
-        model_name: str,
-        base_url: str,
-        timeout_seconds: float,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self.model_name = model_name
-        self._api_key = api_key
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client or httpx.Client(timeout=timeout_seconds)
+class OpenAIAnswerProvider(_OpenAIProviderBase):
 
     def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswerBundle:
-        payload = {
-            "model": self.model_name,
-            "input": [
-                {
-                    "role": "system",
-                    "content": [{"type": "input_text", "text": _answer_system_prompt()}],
-                },
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": _answer_user_prompt(request)}],
-                },
-            ],
-            "max_output_tokens": 900,
-        }
-        response = self._client.post(
-            f"{self._base_url}/responses",
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
+        text = self._post_responses_task(
+            system_prompt=_answer_system_prompt(),
+            user_prompt=_answer_user_prompt(request),
         )
-        response.raise_for_status()
-        text = _extract_openai_output_text(response.json())
         return _parse_generated_answer(text, request)
 
 
-class OpenAIRerankerProvider:
-    provider_name = "openai"
-
-    def __init__(
-        self,
-        *,
-        api_key: str,
-        model_name: str,
-        base_url: str,
-        timeout_seconds: float,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self.model_name = model_name
-        self._api_key = api_key
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client or httpx.Client(timeout=timeout_seconds)
+class OpenAIRerankerProvider(_OpenAIProviderBase):
 
     def rerank(self, request: RerankRequest) -> list[RerankResult]:
-        response = self._client.post(
-            f"{self._base_url}/responses",
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self.model_name,
-                "input": [
-                    {
-                        "role": "system",
-                        "content": [{"type": "input_text", "text": _reranker_system_prompt()}],
-                    },
-                    {
-                        "role": "user",
-                        "content": [{"type": "input_text", "text": _reranker_user_prompt(request)}],
-                    },
-                ],
-                "max_output_tokens": 900,
-            },
+        text = self._post_responses_task(
+            system_prompt=_reranker_system_prompt(),
+            user_prompt=_reranker_user_prompt(request),
         )
-        response.raise_for_status()
-        return _parse_rerank_results(_extract_openai_output_text(response.json()), request)
+        return _parse_rerank_results(text, request)
 
 
-class OllamaAnswerProvider:
-    provider_name = "ollama"
-
-    def __init__(
-        self,
-        *,
-        model_name: str,
-        base_url: str,
-        timeout_seconds: float,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self.model_name = model_name
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client or httpx.Client(timeout=timeout_seconds)
+class OllamaAnswerProvider(_OllamaProviderBase):
 
     def generate(self, request: AnswerGenerationRequest) -> GeneratedAnswerBundle:
-        response = self._client.post(
-            f"{self._base_url}/api/chat",
-            json={
-                "model": self.model_name,
-                "stream": False,
-                "format": "json",
-                "messages": [
-                    {"role": "system", "content": _answer_system_prompt()},
-                    {"role": "user", "content": _answer_user_prompt(request)},
-                ],
-                "options": {"temperature": 0.2},
-            },
+        text = self._post_chat_task(
+            system_prompt=_answer_system_prompt(),
+            user_prompt=_answer_user_prompt(request),
+            temperature=0.2,
         )
-        response.raise_for_status()
-        payload = response.json()
-        content = payload.get("message", {}).get("content", "")
-        if not isinstance(content, str) or not content.strip():
-            raise ValueError("Ollama answer response did not include any assistant content.")
-        return _parse_generated_answer(content, request)
+        return _parse_generated_answer(text, request)
 
 
-class OllamaRerankerProvider:
-    provider_name = "ollama"
-
-    def __init__(
-        self,
-        *,
-        model_name: str,
-        base_url: str,
-        timeout_seconds: float,
-        http_client: httpx.Client | None = None,
-    ) -> None:
-        self.model_name = model_name
-        self._base_url = base_url.rstrip("/")
-        self._client = http_client or httpx.Client(timeout=timeout_seconds)
+class OllamaRerankerProvider(_OllamaProviderBase):
 
     def rerank(self, request: RerankRequest) -> list[RerankResult]:
-        response = self._client.post(
-            f"{self._base_url}/api/chat",
-            json={
-                "model": self.model_name,
-                "stream": False,
-                "format": "json",
-                "messages": [
-                    {"role": "system", "content": _reranker_system_prompt()},
-                    {"role": "user", "content": _reranker_user_prompt(request)},
-                ],
-                "options": {"temperature": 0},
-            },
+        text = self._post_chat_task(
+            system_prompt=_reranker_system_prompt(),
+            user_prompt=_reranker_user_prompt(request),
+            temperature=0,
         )
-        response.raise_for_status()
-        payload = response.json()
-        content = payload.get("message", {}).get("content", "")
-        if not isinstance(content, str) or not content.strip():
-            raise ValueError("Ollama reranker response did not include any assistant content.")
-        return _parse_rerank_results(content, request)
+        return _parse_rerank_results(text, request)
 
 
 def build_embedding_provider(settings: Settings) -> EmbeddingProvider | None:
@@ -412,10 +319,62 @@ def build_reranker_provider(settings: Settings) -> RerankerProvider | None:
 def _answer_system_prompt() -> str:
     return (
         "You are generating grounded answers for a personal knowledge copilot. "
-        "Use only the supplied note evidence. Do not invent facts or citations. "
+        "Sound like a careful editor of the user's own notes, not a generic AI assistant. "
+        "Use only the supplied note evidence. Do not invent facts, citations, or emotional conclusions. "
+        "Prefer concrete wording that already appears in the notes. Reuse short phrases from the notes when it helps the answer feel native to the source material. "
+        "Avoid corporate filler, motivational fluff, and vague summaries. Keep the tone direct, practical, and lightly reflective. "
+        "If the evidence is narrow, stay narrow. If the notes are blunt, stay blunt. "
         "Return strict JSON with keys answer, why_selected, and suggested_actions. "
         "suggested_actions must be an array of 1 to 3 short strings."
     )
+
+
+def _build_openai_headers(api_key: str) -> dict[str, str]:
+    return {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _build_openai_responses_payload(
+    *,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+) -> dict[str, object]:
+    return {
+        "model": model_name,
+        "input": [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": system_prompt}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": user_prompt}],
+            },
+        ],
+        "max_output_tokens": 900,
+    }
+
+
+def _build_ollama_chat_payload(
+    *,
+    model_name: str,
+    system_prompt: str,
+    user_prompt: str,
+    temperature: float,
+) -> dict[str, object]:
+    return {
+        "model": model_name,
+        "stream": False,
+        "format": "json",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "options": {"temperature": temperature},
+    }
 
 
 def _reranker_system_prompt() -> str:
@@ -436,9 +395,18 @@ def _answer_user_prompt(request: AnswerGenerationRequest) -> str:
         )
 
     theme_lines = [f"- {theme.theme}: {theme.summary}" for theme in request.recurring_themes[:4]]
+    voice_lines = _build_voice_cues(request)
     return (
         f"Question: {request.question}\n"
         f"Query style: {request.query_style}\n\n"
+        "Voice cues from the user's notes:\n"
+        f"{chr(10).join(voice_lines) if voice_lines else '- none'}\n\n"
+        "Style goals:\n"
+        f"{_style_goal_for_query_style(request.query_style)}\n"
+        "- Keep the language plain and grounded.\n"
+        "- Prefer specific observations over generic advice.\n"
+        "- Borrow 1 or 2 phrases naturally from the citations when useful.\n"
+        "- Do not sound like a polished corporate assistant.\n\n"
         "Citations:\n"
         f"{chr(10).join(citation_lines) if citation_lines else '- none'}\n\n"
         "Recurring themes:\n"
@@ -447,8 +415,47 @@ def _answer_user_prompt(request: AnswerGenerationRequest) -> str:
         f"answer: {request.fallback_answer}\n"
         f"why_selected: {request.fallback_why_selected}\n"
         f"suggested_actions: {json.dumps(request.fallback_actions)}\n\n"
-        "Rewrite the fallback into a concise, direct answer that stays grounded in the citations."
+        "Rewrite the fallback into a concise, direct answer that stays fully grounded in the citations and feels like it came from the same note voice."
     )
+
+
+def _build_voice_cues(request: AnswerGenerationRequest) -> list[str]:
+    cues: list[str] = []
+    seen: set[str] = set()
+
+    for citation in request.citations[:3]:
+        excerpt = re.sub(r"\s+", " ", citation.excerpt.strip().strip('"'))
+        if not excerpt:
+            continue
+        excerpt = _trim_for_prompt(excerpt, 110)
+        if excerpt.lower() in seen:
+            continue
+        cues.append(f"- {excerpt}")
+        seen.add(excerpt.lower())
+
+    for action in request.fallback_actions[:2]:
+        cleaned = re.sub(r"\s+", " ", action.strip())
+        if not cleaned or cleaned.lower() in seen:
+            continue
+        cues.append(f"- {cleaned}")
+        seen.add(cleaned.lower())
+
+    return cues[:5]
+
+
+def _trim_for_prompt(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    shortened = text[: limit - 3].rsplit(" ", 1)[0].strip()
+    return f"{shortened or text[: limit - 3]}..."
+
+
+def _style_goal_for_query_style(query_style: str) -> str:
+    if query_style == "action":
+        return "- End with the clearest grounded move instead of broad life advice."
+    if query_style == "pattern":
+        return "- Name the recurring pattern plainly and support it with concrete note evidence."
+    return "- State what the notes most strongly point toward without overexplaining."
 
 
 def _reranker_user_prompt(request: RerankRequest) -> str:

@@ -3,6 +3,7 @@ import type {
   NoteDetail,
   NoteDraft,
   NoteSummary,
+  QueryMode,
   QueryResponse,
 } from "@/lib/types";
 
@@ -191,10 +192,10 @@ export async function deleteNote(noteId: string): Promise<NoteDetail> {
   return deleted;
 }
 
-export async function askQuestion(question: string): Promise<QueryResponse> {
+export async function askQuestion(question: string, mode: QueryMode): Promise<QueryResponse> {
   return apiFetch<QueryResponse>("/api/query", {
     method: "POST",
-    body: JSON.stringify({ question, top_k: 5 }),
+    body: JSON.stringify({ question, top_k: 5, mode }),
   });
 }
 

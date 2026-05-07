@@ -64,12 +64,13 @@ const queryResponse: QueryResponse = {
   confidence_label: "high",
   insufficient_evidence: false,
   diagnostics: {
+    query_mode: "fast",
     retrieval_latency_ms: 10,
     rerank_latency_ms: 3,
     generation_latency_ms: 20,
     total_latency_ms: 33,
     semantic_mode: "local-tfidf",
-    reranker_mode: "local-heuristic",
+    reranker_mode: "local-smart:fast",
     answer_provider: "local:heuristic",
     citation_count: 1,
     insufficient_evidence: false,
@@ -118,7 +119,7 @@ describe("AskWorkspace", () => {
     fireEvent.click(screen.getByRole("button", { name: /ask notes/i }));
 
     await waitFor(() => {
-      expect(askQuestion).toHaveBeenCalledWith("What should I do when I lose momentum?");
+      expect(askQuestion).toHaveBeenCalledWith("What should I do when I lose momentum?", "fast");
     });
 
     expect(await screen.findByText(/Grounded response/i)).toBeInTheDocument();
@@ -173,5 +174,21 @@ describe("AskWorkspace", () => {
       screen.getByText(/No notes linked strongly enough to that question yet/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Based on the notes you already wrote/i)).not.toBeInTheDocument();
+  });
+
+  it("sends quality mode when the user switches the toggle", async () => {
+    render(<AskWorkspace />);
+
+    fireEvent.click(screen.getByRole("button", { name: /quality mode/i }));
+
+    const questionField = await screen.findByPlaceholderText(/What should I focus on this week/i);
+    fireEvent.change(questionField, {
+      target: { value: "What helps me recover momentum?" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /ask notes/i }));
+
+    await waitFor(() => {
+      expect(askQuestion).toHaveBeenCalledWith("What helps me recover momentum?", "quality");
+    });
   });
 });

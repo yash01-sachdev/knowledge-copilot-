@@ -49,6 +49,7 @@ def test_note_ingestion_query_and_feedback_flow(tmp_path: Path) -> None:
     assert payload["confidence_label"] in {"low", "medium", "high"}
     assert payload["diagnostics"]["semantic_mode"]
     assert payload["diagnostics"]["answer_provider"]
+    assert payload["diagnostics"]["query_mode"] == "fast"
 
     feedback = client.post(
         "/api/feedback",
@@ -125,6 +126,20 @@ def test_goal_style_query_returns_direct_action_language(tmp_path: Path) -> None
     payload = queried.json()
     assert "the way you win is to" in payload["answer"].lower()
     assert payload["suggested_actions"]
+
+
+def test_quality_mode_is_accepted_by_the_query_api(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    client.post("/api/demo/load")
+
+    queried = client.post(
+        "/api/query",
+        json={"question": "How do I recover momentum?", "top_k": 5, "mode": "quality"},
+    )
+
+    assert queried.status_code == 200
+    payload = queried.json()
+    assert payload["diagnostics"]["query_mode"] == "quality"
 
 
 def test_unrelated_query_returns_insufficient_evidence(tmp_path: Path) -> None:

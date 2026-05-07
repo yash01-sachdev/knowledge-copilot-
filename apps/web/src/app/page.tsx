@@ -1,101 +1,116 @@
 import Link from "next/link";
 
+const landingCards = [
+  {
+    href: "/write",
+    label: "WRITE",
+    title: "Open workspace",
+    chip: "Daily use",
+    color: "blue",
+  },
+  {
+    href: "/ask",
+    label: "ASK",
+    title: "Query your notes",
+    chip: "Retrieval first",
+    color: "purple",
+  },
+  {
+    href: "/memory",
+    label: "MEMORY",
+    title: "Explore long view",
+    chip: "Graph + timeline",
+    color: "emerald",
+  },
+] as const;
+
+const colorClasses = {
+  blue: {
+    bar: "bg-blue-500",
+    hover: "hover:border-blue-500/30",
+    chip: "border-blue-500/20 bg-blue-500/10 text-blue-400",
+  },
+  purple: {
+    bar: "bg-purple-500",
+    hover: "hover:border-purple-500/30",
+    chip: "border-purple-500/20 bg-purple-500/10 text-purple-400",
+  },
+  emerald: {
+    bar: "bg-emerald-500",
+    hover: "hover:border-emerald-500/30",
+    chip: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
+  },
+} as const;
+
 export default function Home() {
   return (
-    <main className="page-frame flex flex-1 flex-col gap-5">
-      <section className="subtle-grid panel relative overflow-hidden rounded-[34px] px-6 py-8 sm:px-8 lg:px-10 lg:py-10">
-        <div className="pointer-events-none absolute -right-12 top-12 h-56 w-56 rounded-full bg-accent-soft blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 left-0 h-44 w-44 rounded-full bg-warm-soft blur-3xl" />
-
-        <div className="relative grid gap-8 xl:grid-cols-[1.12fr_0.88fr] xl:items-end">
-          <div className="max-w-4xl">
-            <div className="kicker mb-5 inline-flex rounded-full border border-accent/25 bg-black/10 px-4 py-1.5">
-              Personal note operating system
-            </div>
-            <h1 className="max-w-3xl text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-6xl">
-              Turn scattered thoughts into a calm, queryable memory system.
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-muted sm:text-lg">
-              Write in a notes-first workspace, sync markdown from your phone, and ask for answers
-              that stay tied to dated evidence instead of sounding like guesswork.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3 text-sm text-muted">
-              <span className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2">
-                grounded answers with citations
-              </span>
-              <span className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2">
-                phone-friendly folder sync
-              </span>
-              <span className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2">
-                memory graph, timeline, recurring themes
-              </span>
-            </div>
+    <main className="relative z-10 min-h-screen overflow-hidden bg-[#090d0c] text-white">
+      <div className="mx-auto grid min-h-screen max-w-[1400px] grid-cols-1 items-center gap-12 px-6 py-12 sm:px-10 lg:grid-cols-2 lg:gap-16 lg:px-20 lg:py-16">
+        <section className="space-y-8">
+          <div className="inline-flex items-center rounded-full border border-white/20 bg-white/5 px-3 py-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-white/60">
+              PERSONAL NOTE OS
+            </span>
           </div>
 
-          <div className="grid gap-4">
-            <Link
-              href="/write"
-              prefetch={false}
-              className="panel-soft group rounded-[28px] p-6 transition hover:-translate-y-0.5 hover:border-accent/30 hover:bg-white/[0.04]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="kicker">Write notes</div>
-                  <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
-                    Open the workspace
-                  </h2>
-                </div>
-                <span className="rounded-full border border-accent/20 bg-accent-soft px-3 py-1 text-xs font-semibold text-accent">
-                  Daily use
-                </span>
-              </div>
-              <p className="mt-3 max-w-xl text-sm leading-7 text-muted">
-                A focused notes app layout with a proper library, editor, import flow, and sync
-                path for notes mirrored from your phone.
-              </p>
-              <div className="mt-5 text-sm font-semibold text-foreground transition group-hover:text-accent">
-                Go to writer
-              </div>
-            </Link>
+          <h1 className="max-w-[680px] text-[42px] font-bold leading-tight text-white sm:text-[48px]">
+            Turn scattered thoughts into a calm, queryable memory system.
+          </h1>
 
-            <Link
-              href="/ask"
-              prefetch={false}
-              className="panel-soft group rounded-[28px] p-6 transition hover:-translate-y-0.5 hover:border-warm/35 hover:bg-white/[0.04]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="kicker">Get answers</div>
-                  <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">
-                    Query your note base
-                  </h2>
-                </div>
-                <span className="rounded-full border border-warm/20 bg-warm-soft px-3 py-1 text-xs font-semibold text-warm">
-                  Retrieval first
-                </span>
-              </div>
-              <p className="mt-3 max-w-xl text-sm leading-7 text-muted">
-                Ask one sharp question at a time and see the ranked evidence, citations, and memory
-                context behind the answer.
-              </p>
-              <div className="mt-5 text-sm font-semibold text-foreground transition group-hover:text-warm">
-                Go to answers
-              </div>
-            </Link>
-          </div>
-        </div>
+          <p className="max-w-[660px] text-[16px] leading-7 text-white/70">
+            Write fast. Ask carefully. Every answer stays grounded in your notes.
+          </p>
 
-        <div className="warm-rule mt-8" />
-
-        <div className="mt-5 flex flex-wrap items-center gap-4 text-sm text-muted">
-          <Link href="/memory" prefetch={false} className="text-accent transition hover:text-foreground">
-            Open memory view
+          <Link
+            href="/write"
+            prefetch={false}
+            className="inline-flex h-12 items-center gap-2 rounded-full bg-emerald-600 px-8 font-medium text-white transition-colors hover:bg-emerald-500"
+          >
+            Start writing
+            <span className="text-2xl leading-none" aria-hidden="true">
+              &rarr;
+            </span>
           </Link>
-          <span className="hidden text-border sm:inline">/</span>
-          <span>Built for journal entries, study notes, project logs, and synced markdown folders.</span>
-        </div>
-      </section>
+        </section>
+
+        <section className="space-y-3">
+          {landingCards.map((card) => {
+            const classes = colorClasses[card.color];
+
+            return (
+              <Link
+                key={card.href}
+                href={card.href}
+                prefetch={false}
+                className={`group relative block overflow-hidden rounded-lg border border-[#1e2d28] bg-[#111816] p-6 transition-colors ${classes.hover}`}
+              >
+                <div className={`absolute bottom-0 left-0 top-0 w-1 ${classes.bar}`} />
+                <div className="flex items-center justify-between gap-5">
+                  <div className="space-y-1">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                      {card.label}
+                    </div>
+                    <div className="text-[18px] font-bold leading-tight text-white">{card.title}</div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${classes.chip}`}
+                    >
+                      {card.chip}
+                    </span>
+                    <span
+                      className="text-3xl leading-none text-white/40 transition-all group-hover:translate-x-0.5 group-hover:text-white"
+                      aria-hidden="true"
+                    >
+                      &rarr;
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            );
+          })}
+        </section>
+      </div>
     </main>
   );
 }

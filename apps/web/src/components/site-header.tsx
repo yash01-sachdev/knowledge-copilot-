@@ -2,12 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-
-const NAV_ITEMS = [
-  { href: "/write", label: "Write" },
-  { href: "/ask", label: "Ask" },
-  { href: "/memory", label: "Memory" },
-];
+import { NAV_ITEMS } from "@/components/nav-items";
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -32,8 +27,11 @@ export function SiteHeader() {
           </Link>
 
           <div className="hidden flex-1 items-center justify-center px-8 xl:flex">
-            <div className="rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-center text-xs uppercase tracking-[0.18em] text-muted">
-              Write fast. Ask carefully. Keep every answer grounded in dated notes.
+            <div className="flex flex-wrap items-center justify-center gap-2 rounded-full border border-white/8 bg-white/[0.03] px-4 py-2 text-center text-xs uppercase tracking-[0.18em] text-muted">
+              <span>Write fast. Ask carefully. Keep every answer grounded in dated notes.</span>
+              <span className="rounded-full border border-accent/20 bg-accent-soft px-2.5 py-1 text-[10px] font-semibold tracking-[0.18em] text-accent">
+                fast ollama mode recommended
+              </span>
             </div>
           </div>
 

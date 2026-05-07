@@ -8,6 +8,7 @@ import type {
 } from "react";
 
 import { getNote } from "@/lib/api";
+import { formatDate, shortenLabel } from "@/lib/formatters";
 import type { MemoryGraphNode, NoteDetail, NoteLink } from "@/lib/types";
 
 const GRAPH_WIDTH = 1240;
@@ -23,6 +24,7 @@ type MemoryGraphProps = {
   nodes: MemoryGraphNode[];
   links: NoteLink[];
   fetchNoteDetail?: (noteId: string) => Promise<NoteDetail>;
+  selectedTheme?: string | null;
 };
 
 type PositionedNode = MemoryGraphNode & {
@@ -55,7 +57,7 @@ type ViewportState = {
   scale: number;
 };
 
-type GraphSize = "standard" | "tall" | "immersive";
+type GraphSize = "standard" | "tall";
 
 type DragState = {
   pointerId: number;
@@ -127,10 +129,10 @@ const THEME_TONES: ThemeTone[] = [
 ];
 
 const GRAPH_HEIGHT_CLASSES: Record<GraphSize, string> = {
-  standard: "h-140",
-  tall: "h-[760px]",
-  immersive: "h-[980px]",
+  standard: "h-[620px]",
+  tall: "h-[820px]",
 };
+const FULLSCREEN_GRAPH_HEIGHT_CLASS = "h-[calc(100vh-220px)] min-h-[720px]";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -139,25 +141,6 @@ function clamp(value: number, min: number, max: number): number {
 function toTimestamp(value: string): number {
   const timestamp = Date.parse(value);
   return Number.isNaN(timestamp) ? 0 : timestamp;
-}
-
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatFullDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
-function shortenLabel(value: string, limit = 22): string {
-  return value.length <= limit ? value : `${value.slice(0, limit - 1)}...`;
 }
 
 function isActivationKey(event: KeyboardEvent<SVGPathElement | SVGGElement | HTMLButtonElement>): boolean {
@@ -360,13 +343,15 @@ export function MemoryGraph({
   nodes,
   links,
   fetchNoteDetail = getNote,
+  selectedTheme = null,
 }: MemoryGraphProps) {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedLinkKey, setSelectedLinkKey] = useState<string | null>(null);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [hoveredLinkKey, setHoveredLinkKey] = useState<string | null>(null);
-  const [strongestOnly, setStrongestOnly] = useState(true);
+  const strongestOnly = true;
   const [graphSize, setGraphSize] = useState<GraphSize>("standard");
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [viewport, setViewport] = useState<ViewportState>({ x: 0, y: 0, scale: 1 });
   const [isDragging, setIsDragging] = useState(false);
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
@@ -377,6 +362,7 @@ export function MemoryGraph({
   const svgRef = useRef<SVGSVGElement | null>(null);
   const dragStateRef = useRef<DragState | null>(null);
   const requestCounterRef = useRef(0);
+  const previousGraphSizeRef = useRef<GraphSize>("standard");
 
   const { visibleNodes, visibleLinks } = useMemo(
     () => getVisibleGraph(nodes, links, strongestOnly),
@@ -389,7 +375,7 @@ export function MemoryGraph({
     [positionedNodes],
   );
   const positionedLinks = useMemo(() => buildLinkGeometry(visibleLinks, nodeMap), [nodeMap, visibleLinks]);
-  const { themeMap, legend } = useMemo(
+  const { themeMap } = useMemo(
     () => buildThemePalette(positionedNodes, positionedLinks),
     [positionedLinks, positionedNodes],
   );
@@ -493,11 +479,57 @@ export function MemoryGraph({
   const connectedLinks = activeNode
     ? [...(adjacency.get(activeNode.note_id) ?? [])].sort((left, right) => right.strength - left.strength)
     : [];
+  const themeNodeIds = useMemo(() => {
+    if (!selectedTheme) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      positionedNodes.filter((node) => node.primary_theme === selectedTheme).map((node) => node.note_id),
+    );
+  }, [positionedNodes, selectedTheme]);
+  const themeLinkKeys = useMemo(() => {
+    if (!selectedTheme) {
+      return new Set<string>();
+    }
+
+    return new Set(
+      positionedLinks
+        .filter(
+          (link) =>
+            link.shared_themes.includes(selectedTheme) ||
+            themeNodeIds.has(link.source_note_id) ||
+            themeNodeIds.has(link.target_note_id),
+        )
+        .map((link) => link.key),
+    );
+  }, [positionedLinks, selectedTheme, themeNodeIds]);
+  const themeContextNodeIds = useMemo(() => {
+    if (!selectedTheme) {
+      return new Set<string>();
+    }
+
+    const ids = new Set<string>(themeNodeIds);
+
+    for (const link of positionedLinks) {
+      if (
+        link.shared_themes.includes(selectedTheme) ||
+        themeNodeIds.has(link.source_note_id) ||
+        themeNodeIds.has(link.target_note_id)
+      ) {
+        ids.add(link.source_note_id);
+        ids.add(link.target_note_id);
+      }
+    }
+
+    return ids;
+  }, [positionedLinks, selectedTheme, themeNodeIds]);
   const earliestLabel =
     positionedNodes.length > 0
       ? formatDate(
           [...positionedNodes].sort((left, right) => toTimestamp(left.note_date) - toTimestamp(right.note_date))[0]
             .note_date,
+          "short",
         )
       : "";
   const latestLabel =
@@ -505,11 +537,37 @@ export function MemoryGraph({
       ? formatDate(
           [...positionedNodes].sort((left, right) => toTimestamp(right.note_date) - toTimestamp(left.note_date))[0]
             .note_date,
+          "short",
         )
       : "";
   const hasFocus = activeLink !== null || activeNode !== null;
-  const isImmersive = graphSize === "immersive";
-  const graphHeightClass = GRAPH_HEIGHT_CLASSES[graphSize];
+  const hasThemeFocus = Boolean(selectedTheme);
+  const hasGraphFocus = hasFocus || hasThemeFocus;
+  const graphHeightClass = isFullscreen ? FULLSCREEN_GRAPH_HEIGHT_CLASS : GRAPH_HEIGHT_CLASSES[graphSize];
+  const showInspector = selectedLinkKey !== null && activeLink !== null;
+  const hasMovedViewport = viewport.x !== 0 || viewport.y !== 0 || viewport.scale !== 1;
+
+  useEffect(() => {
+    if (!isFullscreen) {
+      return;
+    }
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleEscape(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsFullscreen(false);
+      }
+    }
+
+    window.addEventListener("keydown", handleEscape);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [isFullscreen]);
 
   function setZoom(nextScale: number, focusX = GRAPH_WIDTH / 2, focusY = GRAPH_HEIGHT / 2) {
     setViewport((current) => {
@@ -536,6 +594,17 @@ export function MemoryGraph({
     setOpenNoteId(null);
     setNoteSheetError(null);
     setLoadingNoteId(null);
+  }
+
+  function openFullscreen() {
+    previousGraphSizeRef.current = graphSize;
+    setGraphSize("tall");
+    setIsFullscreen(true);
+  }
+
+  function closeFullscreen() {
+    setIsFullscreen(false);
+    setGraphSize(previousGraphSizeRef.current);
   }
 
   async function openNoteSheet(noteId: string) {
@@ -640,99 +709,69 @@ export function MemoryGraph({
   }
 
   return (
-    <div className={`grid gap-4 ${isImmersive ? "" : "xl:grid-cols-[minmax(0,1fr)_320px]"}`}>
-      <div className="overflow-hidden rounded-3xl border border-border bg-panel-strong">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-          <div>
-            <div className="mono text-[11px] uppercase tracking-[0.22em] text-accent">Interactive map</div>
-            <p className="mt-1 text-sm text-muted">
-              Drag the canvas, zoom with the wheel, click a node to open the note, and click a link to
-              pin the connection.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setStrongestOnly((current) => !current)}
-              className={`rounded-full border px-3 py-1.5 text-xs transition ${
-                strongestOnly
-                  ? "border-accent/30 bg-accent-soft text-accent"
-                  : "border-border bg-panel-soft text-muted hover:border-accent/25 hover:text-foreground"
-              }`}
-            >
-              {strongestOnly ? "Focused map" : "Expanded map"}
-            </button>
-            <div className="flex items-center gap-1 rounded-full border border-border bg-panel-soft p-1">
-              {(["standard", "tall", "immersive"] as const).map((size) => (
-                <button
-                  key={size}
-                  type="button"
-                  onClick={() => setGraphSize(size)}
-                  className={`rounded-full px-3 py-1.5 text-xs transition ${
-                    graphSize === size
-                      ? "bg-accent-soft text-accent"
-                      : "text-muted hover:text-foreground"
-                  }`}
-                >
-                  {size === "standard" ? "Standard" : size === "tall" ? "Tall" : "Immersive"}
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              onClick={() => setZoom(viewport.scale - 0.16)}
-              className="rounded-full border border-border bg-panel-soft px-3 py-1.5 text-xs text-muted transition hover:border-accent/25 hover:text-foreground"
-            >
-              Zoom out
-            </button>
-            <div className="mono rounded-full border border-border bg-panel-soft px-3 py-1.5 text-[11px] text-muted">
-              {Math.round(viewport.scale * 100)}%
-            </div>
-            <button
-              type="button"
-              onClick={() => setZoom(viewport.scale + 0.16)}
-              className="rounded-full border border-border bg-panel-soft px-3 py-1.5 text-xs text-muted transition hover:border-accent/25 hover:text-foreground"
-            >
-              Zoom in
-            </button>
-            <button
-              type="button"
-              onClick={resetView}
-              className="rounded-full border border-border bg-panel-soft px-3 py-1.5 text-xs text-muted transition hover:border-accent/25 hover:text-foreground"
-            >
-              Reset view
-            </button>
-            <button
-              type="button"
-              onClick={resetFocus}
-              className="rounded-full border border-border bg-panel-soft px-3 py-1.5 text-xs text-muted transition hover:border-accent/25 hover:text-foreground"
-            >
-              Reset focus
-            </button>
-          </div>
-        </div>
+    <>
+      {isFullscreen ? (
+        <div
+          className="fixed inset-0 z-[70] bg-[rgba(2,7,14,0.78)] backdrop-blur-sm"
+          onClick={closeFullscreen}
+        />
+      ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-3">
-          {legend.map((item) => (
-            <span
-              key={item.theme}
-              className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs text-muted"
-              style={{
-                borderColor: item.tone.soft,
-                backgroundColor: item.tone.soft,
-              }}
+      <div
+        className={
+          isFullscreen
+            ? "fixed inset-4 z-[80] overflow-auto rounded-[32px] border border-border bg-[rgba(5,10,18,0.96)] p-4 shadow-[0_36px_120px_rgba(0,0,0,0.52)]"
+            : ""
+        }
+      >
+        <div
+          className={`grid gap-4 ${
+            isFullscreen && showInspector ? "h-full xl:grid-cols-[minmax(0,1fr)_320px]" : ""
+          }`}
+        >
+      <div className="overflow-hidden rounded-lg border border-border bg-panel-strong">
+        <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-4">
+          <div className="min-w-0">
+            <div className="mono text-[11px] uppercase tracking-[0.22em] text-accent">Interactive map</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted">
+              <span>{positionedNodes.length} notes</span>
+              <span className="text-border">/</span>
+              <span>{positionedLinks.length} links</span>
+              {selectedTheme ? (
+                <>
+                  <span className="text-border">/</span>
+                  <span className="truncate text-accent">{selectedTheme}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {hasMovedViewport ? (
+              <button
+                type="button"
+                onClick={resetView}
+                className="rounded-full border border-border bg-panel-soft px-3 py-2 text-xs text-muted transition hover:border-accent/25 hover:text-foreground"
+              >
+                Reset
+              </button>
+            ) : null}
+            {selectedLinkKey ? (
+              <button
+                type="button"
+                onClick={resetFocus}
+                className="rounded-full border border-border bg-panel-soft px-3 py-2 text-xs text-muted transition hover:border-accent/25 hover:text-foreground"
+              >
+                Clear
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={isFullscreen ? closeFullscreen : openFullscreen}
+              className="rounded-full border border-accent/30 bg-accent-soft px-4 py-2 text-sm font-semibold text-accent transition hover:border-accent/50 hover:bg-accent hover:text-background"
             >
-              <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{ backgroundColor: item.tone.base, boxShadow: `0 0 0 2px ${item.tone.soft}` }}
-              />
-              {item.theme}
-              <span className="mono text-[11px] text-foreground">{item.count}</span>
-            </span>
-          ))}
-          <span className="mono ml-auto text-[11px] uppercase tracking-[0.18em] text-muted">
-            {positionedNodes.length} visible notes / {positionedLinks.length} visible links
-          </span>
+              {isFullscreen ? "Exit fullscreen" : "Open fullscreen"}
+            </button>
+          </div>
         </div>
 
         <div className="subtle-grid relative overflow-hidden">
@@ -742,6 +781,8 @@ export function MemoryGraph({
             viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
             className={`${graphHeightClass} w-full`}
             style={{ touchAction: "none", cursor: isDragging ? "grabbing" : "default" }}
+            shapeRendering="geometricPrecision"
+            textRendering="geometricPrecision"
             onWheel={handleWheel}
             onPointerMove={handlePointerMove}
             onPointerUp={endDrag}
@@ -750,7 +791,7 @@ export function MemoryGraph({
           >
             <defs>
               <filter id="memory-node-glow" x="-50%" y="-50%" width="200%" height="200%">
-                <feGaussianBlur stdDeviation="7" result="blurred" />
+                <feGaussianBlur stdDeviation="2.4" result="blurred" />
                 <feMerge>
                   <feMergeNode in="blurred" />
                   <feMergeNode in="SourceGraphic" />
@@ -778,7 +819,7 @@ export function MemoryGraph({
               })}
             </defs>
 
-            <rect x="0" y="0" width={GRAPH_WIDTH} height={GRAPH_HEIGHT} fill="rgba(15, 23, 45, 0.55)" />
+            <rect x="0" y="0" width={GRAPH_WIDTH} height={GRAPH_HEIGHT} fill="rgba(10, 16, 29, 0.92)" />
             <rect
               x="0"
               y="0"
@@ -791,8 +832,8 @@ export function MemoryGraph({
             <text
               x="28"
               y="32"
-              fill="rgba(159, 182, 209, 0.75)"
-              fontSize="11"
+              fill="rgba(190, 210, 232, 0.88)"
+              fontSize="12"
               fontFamily="var(--font-plex-mono)"
             >
               earlier notes
@@ -800,8 +841,8 @@ export function MemoryGraph({
             <text
               x={GRAPH_WIDTH - 108}
               y="32"
-              fill="rgba(159, 182, 209, 0.75)"
-              fontSize="11"
+              fill="rgba(190, 210, 232, 0.88)"
+              fontSize="12"
               fontFamily="var(--font-plex-mono)"
             >
               recent notes
@@ -813,11 +854,12 @@ export function MemoryGraph({
                 return (
                   <line
                     key={`guide-${node.note_id}`}
-                    x1={node.x}
-                    y1="56"
-                    x2={node.x}
-                    y2={GRAPH_HEIGHT - 40}
+                  x1={node.x}
+                  y1="56"
+                  x2={node.x}
+                  y2={GRAPH_HEIGHT - 40}
                     stroke={tone.soft}
+                    strokeOpacity={0.34}
                     strokeDasharray="4 12"
                   />
                 );
@@ -825,10 +867,28 @@ export function MemoryGraph({
 
               {positionedLinks.map((link) => {
                 const isActive = focusedLinkKeys.has(link.key);
-                const isDimmed = hasFocus && !isActive;
+                const isThemeRelated = themeLinkKeys.has(link.key);
+                const isHighlighted = hasFocus ? isActive : hasThemeFocus ? isThemeRelated : true;
+                const isDimmed = hasGraphFocus && !isHighlighted;
                 const { name: dominantTheme, tone } = dominantThemeForLink(link, themeMap);
-                const visibleOpacity = !hasFocus ? 0.42 + link.strength * 0.22 : isActive ? 0.98 : 0.1;
-                const strokeWidth = !hasFocus ? 1.4 + link.strength * 2.4 : isActive ? 3.6 + link.strength * 4 : 1.15;
+                const visibleOpacity = !hasGraphFocus
+                  ? 0.62 + link.strength * 0.18
+                  : hasFocus
+                    ? isActive
+                      ? 0.96
+                      : 0.14
+                    : isThemeRelated
+                      ? 0.88
+                      : 0.08;
+                const strokeWidth = !hasGraphFocus
+                  ? 1.8 + link.strength * 2.8
+                  : hasFocus
+                    ? isActive
+                      ? 3.2 + link.strength * 3.4
+                      : 1.2
+                    : isThemeRelated
+                      ? 2.8 + link.strength * 3
+                      : 1;
 
                 return (
                   <g key={link.key}>
@@ -860,9 +920,9 @@ export function MemoryGraph({
                       strokeWidth={strokeWidth}
                       strokeOpacity={visibleOpacity}
                       strokeLinecap="round"
-                      filter={isActive ? "url(#memory-node-glow)" : undefined}
+                      filter={isHighlighted ? "url(#memory-node-glow)" : undefined}
                     />
-                    {!isDimmed && isActive ? (
+                    {!isDimmed && (isActive || (!hasFocus && isThemeRelated && link.strength >= 0.28)) ? (
                       <g transform={`translate(${link.midX}, ${link.midY - 18})`}>
                         <rect
                           x={-68}
@@ -870,15 +930,17 @@ export function MemoryGraph({
                           width={136}
                           height={26}
                           rx={13}
-                          fill="rgba(11, 16, 32, 0.94)"
-                          stroke={tone.soft}
+                          fill="rgba(7, 12, 24, 0.98)"
+                          stroke={tone.base}
+                          strokeOpacity={0.45}
                         />
                         <text
                           x="0"
                           y="4"
                           textAnchor="middle"
-                          fill="#edf7ff"
-                          fontSize="11"
+                          fill="#f6fbff"
+                          fontSize="12"
+                          fontWeight="700"
                           fontFamily="var(--font-plex-mono)"
                         >
                           {Math.round(link.strength * 100)}% {dominantTheme ? dominantTheme : "match"}
@@ -896,7 +958,10 @@ export function MemoryGraph({
                   (activeLink.source_note_id === node.note_id || activeLink.target_note_id === node.note_id);
                 const isActive = activeNode?.note_id === node.note_id || isEndpoint || openNoteId === node.note_id;
                 const isRelated = focusedNodeIds.has(node.note_id) || openNoteId === node.note_id;
-                const isDimmed = hasFocus && !isRelated;
+                const isThemePrimary = selectedTheme !== null && node.primary_theme === selectedTheme;
+                const isThemeRelated = themeContextNodeIds.has(node.note_id);
+                const isHighlighted = hasFocus ? isRelated : hasThemeFocus ? isThemeRelated : true;
+                const isDimmed = hasGraphFocus && !isHighlighted;
 
                 return (
                   <g
@@ -924,24 +989,40 @@ export function MemoryGraph({
                       cy={node.y}
                       r={node.radius + 10}
                       fill={tone.soft}
-                      opacity={isActive ? 1 : isRelated ? 0.72 : isDimmed ? 0.08 : 0.32}
-                      filter={isActive ? "url(#memory-node-glow)" : undefined}
+                      opacity={
+                        isActive
+                          ? 0.34
+                          : hasFocus
+                            ? isRelated
+                              ? 0.16
+                              : isDimmed
+                                ? 0.03
+                                : 0.09
+                            : isThemePrimary
+                              ? 0.28
+                              : isThemeRelated
+                                ? 0.16
+                                : isDimmed
+                                  ? 0.03
+                                  : 0.09
+                      }
+                      filter={isHighlighted ? "url(#memory-node-glow)" : undefined}
                     />
                     <circle
                       cx={node.x}
                       cy={node.y}
                       r={node.radius}
-                      fill={isActive ? tone.base : tone.panel}
-                      stroke={isActive ? tone.border : tone.base}
-                      strokeWidth={isActive ? 2.5 : 1.6}
-                      opacity={isDimmed ? 0.28 : 1}
+                      fill={isActive || isThemePrimary ? tone.base : "rgba(12, 19, 34, 0.98)"}
+                      stroke={isActive || isThemePrimary ? tone.border : tone.base}
+                      strokeWidth={isActive ? 2.6 : isThemePrimary ? 2.2 : 1.9}
+                      opacity={isDimmed ? 0.24 : isThemeRelated ? 1 : 0.94}
                     />
                     <text
                       x={node.x}
                       y={node.y + 4}
                       textAnchor="middle"
-                      fill={isActive ? tone.ink : "#ebf3ff"}
-                      fontSize="12"
+                      fill={isActive || isThemePrimary ? tone.ink : "#f6fbff"}
+                      fontSize="13"
                       fontWeight="700"
                       fontFamily="var(--font-plex-mono)"
                       opacity={isDimmed ? 0.5 : 1}
@@ -956,15 +1037,16 @@ export function MemoryGraph({
                         width={152}
                         height={28}
                         rx={14}
-                        fill={isActive ? tone.panel : "rgba(15, 23, 45, 0.86)"}
-                        stroke={isActive ? tone.soft : "rgba(148, 163, 184, 0.14)"}
+                        fill={isActive || isThemePrimary ? tone.panel : "rgba(8, 13, 25, 0.97)"}
+                        stroke={isActive || isThemePrimary ? tone.base : "rgba(186, 204, 224, 0.2)"}
                       />
                       <text
                         x="0"
                         y="4"
                         textAnchor="middle"
-                        fill="#edf7ff"
-                        fontSize="11"
+                        fill="#f7fbff"
+                        fontSize="12"
+                        fontWeight="700"
                         fontFamily="var(--font-plex-mono)"
                       >
                         {shortenLabel(node.title, 20)}
@@ -977,9 +1059,10 @@ export function MemoryGraph({
                         y={node.y + node.radius + 19}
                         textAnchor="middle"
                         fill={tone.base}
-                        fontSize="10"
+                        fontSize="11"
+                        fontWeight="600"
                         fontFamily="var(--font-plex-mono)"
-                        opacity={isDimmed ? 0.28 : 0.95}
+                        opacity={isDimmed ? 0.24 : 0.98}
                       >
                         {shortenLabel(node.primary_theme, 18)}
                       </text>
@@ -989,10 +1072,6 @@ export function MemoryGraph({
               })}
             </g>
           </svg>
-
-          <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-border bg-panel/80 px-3 py-1.5 text-[11px] text-muted backdrop-blur">
-            Drag to pan. Scroll to zoom.
-          </div>
 
           <div className="pointer-events-none absolute inset-x-4 bottom-3 flex items-center justify-between text-[11px] text-muted">
             <span className="mono">{earliestLabel}</span>
@@ -1048,7 +1127,7 @@ export function MemoryGraph({
                   <div className="space-y-4">
                     <div className="flex flex-wrap gap-2">
                       <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent">
-                        {formatFullDate(openNote.note_date)}
+                    {formatDate(openNote.note_date, "full")}
                       </span>
                       {openNode?.primary_theme ? (
                         <span
@@ -1102,7 +1181,7 @@ export function MemoryGraph({
                                   <div>
                                     <div className="text-sm font-medium text-foreground">{otherNode.title}</div>
                                     <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">
-                                      {formatDate(otherNode.note_date)}
+                                      {formatDate(otherNode.note_date, "short")}
                                     </div>
                                   </div>
                                   <span
@@ -1138,7 +1217,8 @@ export function MemoryGraph({
         </div>
       </div>
 
-      <aside className="panel-soft rounded-3xl p-5">
+      {showInspector ? (
+      <aside className="panel-soft rounded-lg p-5">
         <div className="mono text-[11px] uppercase tracking-[0.22em] text-accent">Inspector</div>
 
         {activeLink ? (
@@ -1155,7 +1235,7 @@ export function MemoryGraph({
                     {activeLink.source_title} to {activeLink.target_title}
                   </div>
                   <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">
-                    {formatDate(activeLink.source_date)} and {formatDate(activeLink.target_date)}
+                    {formatDate(activeLink.source_date, "short")} and {formatDate(activeLink.target_date, "short")}
                   </div>
                 </div>
                 <span
@@ -1200,7 +1280,7 @@ export function MemoryGraph({
                   >
                     <div className="text-sm font-medium text-foreground">{node.title}</div>
                     <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">
-                      {formatDate(node.note_date)}
+                      {formatDate(node.note_date, "short")}
                     </div>
                   </button>
                 ))}
@@ -1221,7 +1301,7 @@ export function MemoryGraph({
             <div className="rounded-[18px] border border-border bg-panel-strong px-4 py-4">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent">
-                  {formatDate(activeNode.note_date)}
+                  {formatDate(activeNode.note_date, "short")}
                 </span>
                 <span className="rounded-full border border-border px-3 py-1 text-xs text-muted">
                   degree {activeNode.degree}
@@ -1270,7 +1350,7 @@ export function MemoryGraph({
                           <div>
                             <div className="text-sm font-medium text-foreground">{otherNode.title}</div>
                             <div className="mt-1 text-xs uppercase tracking-[0.16em] text-muted">
-                              {formatDate(otherNode.note_date)}
+                              {formatDate(otherNode.note_date, "short")}
                             </div>
                           </div>
                           <span
@@ -1360,6 +1440,9 @@ export function MemoryGraph({
           </div>
         )}
       </aside>
-    </div>
+      ) : null}
+        </div>
+      </div>
+    </>
   );
 }

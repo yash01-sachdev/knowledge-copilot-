@@ -10,7 +10,7 @@ from .domain import SearchCandidate
 from .phrases import extract_key_phrases
 from .providers import AnswerGenerationRequest, AnswerProvider
 from .schemas import Citation, NoteLink, QueryResponse, RecurringTheme, TimelineEvent
-from .search import analyze_query
+from .search import QueryProfile, analyze_query
 from .text_utils import (
     build_match_terms,
     clamp,
@@ -34,6 +34,21 @@ class NoteProfile:
     score: float = 0.0
     excerpts: list[str] = field(default_factory=list)
     terms: list[str] = field(default_factory=list)
+
+
+TOPIC_META_TERMS = {
+    "according",
+    "based",
+    "idea",
+    "ideas",
+    "think",
+    "thought",
+    "thoughts",
+    "view",
+    "views",
+}
+
+
 def compose_answer(
     question: str,
     candidates: list[SearchCandidate],
@@ -61,6 +76,7 @@ def compose_answer(
     query_terms = set(build_match_terms(question))
     profile = analyze_query(question)
     evidence = _build_evidence_points(candidates, query_terms)
+    evidence = _keep_topically_aligned_evidence(question, evidence, profile)
     top_candidates = [item.candidate for item in evidence[: min(4, len(evidence))]]
     unique_titles = list(OrderedDict((candidate.note_id, candidate.title) for candidate in top_candidates).values())
     key_terms = extract_key_phrases(
@@ -85,9 +101,13 @@ def compose_answer(
             strongest_candidate.keyword_score >= 0.58
             or strongest_candidate.rerank_score >= 0.52
             or strongest_candidate.semantic_score >= 0.78
+            or _is_direct_topic_match(question, strongest_candidate)
         )
     )
-    insufficient = confidence < 0.42 or (len(top_candidates) < 2 and not has_single_strong_match)
+    insufficient = (
+        (confidence < 0.42 and not has_single_strong_match)
+        or (len(top_candidates) < 2 and not has_single_strong_match)
+    )
 
     if profile.is_pattern_query:
         query_style = "pattern"
@@ -99,11 +119,17 @@ def compose_answer(
         query_style = "reflective"
         lead = _reflective_answer(evidence, key_terms)
 
-    why_selected = (
-        f"These notes were picked because they combine semantic similarity with direct phrase overlap, "
-        f"cover {len(unique_titles)} distinct notes, and span dated evidence from "
-        f"{top_candidates[-1].note_date.isoformat()} to {top_candidates[0].note_date.isoformat()}."
-    )
+    if len(unique_titles) == 1:
+        why_selected = (
+            f"This note was picked because it combines semantic similarity with direct phrase overlap and "
+            f"was the strongest grounded match for your question."
+        )
+    else:
+        why_selected = (
+            f"These notes were picked because they combine semantic similarity with direct phrase overlap, "
+            f"cover {len(unique_titles)} distinct notes, and span dated evidence from "
+            f"{top_candidates[-1].note_date.isoformat()} to {top_candidates[0].note_date.isoformat()}."
+        )
 
     suggested_actions = _build_actions(evidence)
     citations = [
@@ -185,10 +211,113 @@ def _build_evidence_points(
     return evidence
 
 
+def _keep_topically_aligned_evidence(
+    question: str,
+    evidence: list[EvidencePoint],
+    profile: QueryProfile,
+) -> list[EvidencePoint]:
+    if len(evidence) <= 1:
+        return evidence
+    if profile.is_pattern_query:
+        return evidence
+
+    strongest = evidence[0]
+    query_terms = _topic_terms(question)
+    anchor_terms = _topic_terms(f"{strongest.candidate.title} {strongest.sentence}")
+    strongest_phrases = _topic_phrases(f"{strongest.candidate.title} {strongest.sentence}")
+    filtered = [strongest]
+
+    for point in evidence[1:]:
+        candidate_terms = _topic_terms(f"{point.candidate.title} {point.sentence}")
+        anchor_overlap = _term_overlap(candidate_terms, anchor_terms)
+        query_overlap = _term_overlap(candidate_terms, query_terms)
+        phrase_overlap = _phrase_overlap(
+            _topic_phrases(f"{point.candidate.title} {point.sentence}"),
+            strongest_phrases,
+        )
+        topical_score = (0.55 * anchor_overlap) + (0.3 * query_overlap) + (0.15 * phrase_overlap)
+
+        if topical_score >= 0.18:
+            filtered.append(point)
+
+    return filtered
+
+
+def _is_direct_topic_match(question: str, candidate: SearchCandidate) -> bool:
+    query_terms = _topic_terms(question)
+    if not query_terms:
+        return False
+
+    title_terms = _topic_terms(candidate.title)
+    title_overlap = _term_overlap(query_terms, title_terms)
+    if title_overlap >= 0.5:
+        return True
+
+    content_terms = _topic_terms(candidate.content)
+    content_overlap = _term_overlap(query_terms, content_terms)
+    if content_overlap >= 0.5:
+        return True
+
+    candidate_phrases = _topic_phrases(f"{candidate.title} {candidate.content}")
+    query_phrases = _topic_phrases(question)
+    if _phrase_overlap(query_phrases, candidate_phrases) >= 0.5:
+        return True
+
+    return False
+
+
+def _topic_terms(text: str) -> set[str]:
+    terms: set[str] = set()
+    for token in build_match_terms(text):
+        normalized = _normalize_topic_term(token)
+        if not normalized or normalized in TOPIC_META_TERMS:
+            continue
+        terms.add(normalized)
+    return terms
+
+
+def _topic_phrases(text: str) -> set[str]:
+    terms = sorted(_topic_terms(text))
+    phrases: set[str] = set()
+    for size in (2, 3):
+        if len(terms) < size:
+            continue
+        for index in range(len(terms) - size + 1):
+            phrases.add(" ".join(terms[index : index + size]))
+    return phrases
+
+
+def _normalize_topic_term(term: str) -> str:
+    if len(term) > 4 and term.endswith("ies"):
+        return term[:-3] + "y"
+    if len(term) > 4 and term.endswith("s") and not term.endswith(("ss", "us")):
+        return term[:-1]
+    return term
+
+
+def _term_overlap(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    return len(left & right) / max(min(len(left), len(right)), 1)
+
+
+def _phrase_overlap(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    return len(left & right) / max(len(right), 1)
+
+
 def _pattern_answer(evidence: list[EvidencePoint], key_terms: list[str]) -> str:
     themes = ", ".join(key_terms[:3]) if key_terms else "a few recurring themes"
     strongest = evidence[0]
-    supporting = evidence[1] if len(evidence) > 1 else evidence[0]
+    if len(evidence) == 1:
+        return (
+            f"Your notes repeatedly come back to {themes}. The clearest signal appears in "
+            f"'{strongest.candidate.title}' ({strongest.candidate.note_date.isoformat()}), where you wrote: "
+            f"\"{strongest.sentence}\""
+        )
+
+    supporting = evidence[1]
     return (
         f"Your notes repeatedly come back to {themes}. The clearest signal appears in "
         f"'{strongest.candidate.title}' ({strongest.candidate.note_date.isoformat()}), where you wrote: "
@@ -201,9 +330,16 @@ def _pattern_answer(evidence: list[EvidencePoint], key_terms: list[str]) -> str:
 def _action_answer(evidence: list[EvidencePoint], key_terms: list[str]) -> str:
     principles = _distill_action_principles(evidence)
     strongest = evidence[0]
-    supporting = evidence[1] if len(evidence) > 1 else evidence[0]
     principle_line = " -> ".join(principles[:3]) if principles else "narrow the scope and act on one concrete step"
 
+    if len(evidence) == 1:
+        return (
+            f"Based on your notes, the way you win is to {principle_line}. "
+            f"Your clearest note is '{strongest.candidate.title}' ({strongest.candidate.note_date.isoformat()}), "
+            f"which says: \"{strongest.sentence}\""
+        )
+
+    supporting = evidence[1]
     return (
         f"Based on your notes, the way you win is to {principle_line}. "
         f"Your clearest note is '{strongest.candidate.title}' ({strongest.candidate.note_date.isoformat()}), "
@@ -216,7 +352,14 @@ def _action_answer(evidence: list[EvidencePoint], key_terms: list[str]) -> str:
 def _reflective_answer(evidence: list[EvidencePoint], key_terms: list[str]) -> str:
     themes = ", ".join(key_terms[:3]) if key_terms else "the strongest matching evidence"
     strongest = evidence[0]
-    supporting = evidence[1] if len(evidence) > 1 else evidence[0]
+    if len(evidence) == 1:
+        return (
+            f"Your notes most strongly point toward {themes}. The best matching note is "
+            f"'{strongest.candidate.title}' ({strongest.candidate.note_date.isoformat()}), where you wrote: "
+            f"\"{strongest.sentence}\""
+        )
+
+    supporting = evidence[1]
     return (
         f"Your notes most strongly point toward {themes}. The best matching note is "
         f"'{strongest.candidate.title}' ({strongest.candidate.note_date.isoformat()}), where you wrote: "

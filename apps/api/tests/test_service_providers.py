@@ -106,15 +106,38 @@ def test_service_uses_answer_provider_for_grounded_queries(tmp_path: Path) -> No
     service.load_demo_notes()
 
     response, diagnostics = service.answer_question_with_diagnostics(
-        QueryRequest(question="How do I win interview prep?", top_k=5)
+        QueryRequest(question="How do I win interview prep?", top_k=5, mode="quality")
     )
 
     assert response.answer == "LLM::How do I win interview prep?"
     assert response.why_selected == "LLM reason for action"
     assert response.suggested_actions == ["LLM action"]
     assert diagnostics.answer_provider == "fake-answer:unit-test"
+    assert diagnostics.query_mode == "quality"
     assert answer_provider.requests
     assert response.diagnostics is not None
+    assert response.diagnostics.query_mode == "quality"
+
+
+def test_service_keeps_fast_mode_on_local_answer_even_when_quality_provider_exists(tmp_path: Path) -> None:
+    settings = _make_settings(tmp_path)
+    repository = SQLiteRepository(settings.database_path)
+    answer_provider = FakeAnswerProvider()
+    service = KnowledgeService(
+        repository,
+        settings,
+        answer_provider=answer_provider,
+    )
+    service.load_demo_notes()
+
+    response, diagnostics = service.answer_question_with_diagnostics(
+        QueryRequest(question="How do I win interview prep?", top_k=5, mode="fast")
+    )
+
+    assert response.answer != "LLM::How do I win interview prep?"
+    assert diagnostics.answer_provider == "local:heuristic"
+    assert diagnostics.query_mode == "fast"
+    assert answer_provider.requests == []
 
 
 def test_service_uses_reranker_provider_and_exposes_mode(tmp_path: Path) -> None:
@@ -129,7 +152,7 @@ def test_service_uses_reranker_provider_and_exposes_mode(tmp_path: Path) -> None
     service.load_demo_notes()
 
     response, diagnostics = service.answer_question_with_diagnostics(
-        QueryRequest(question="How do I recover momentum?", top_k=5)
+        QueryRequest(question="How do I recover momentum?", top_k=5, mode="quality")
     )
 
     assert reranker_provider.requests

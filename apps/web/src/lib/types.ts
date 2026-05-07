@@ -93,6 +93,7 @@ export type MemoryOverview = {
 };
 
 export type QueryDiagnostics = {
+  query_mode: "fast" | "quality";
   retrieval_latency_ms: number;
   rerank_latency_ms: number;
   generation_latency_ms: number;
@@ -103,6 +104,8 @@ export type QueryDiagnostics = {
   citation_count: number;
   insufficient_evidence: boolean;
 };
+
+export type QueryMode = "fast" | "quality";
 
 export type QueryResponse = {
   answer: string;

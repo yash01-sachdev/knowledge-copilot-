@@ -1,0 +1,45 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      KNOWLEDGE_COPILOT_DB_PATH: ${KNOWLEDGE_COPILOT_DB_PATH:-/data/knowledge_copilot.db}
+      KNOWLEDGE_COPILOT_CORS_ORIGINS: ${KNOWLEDGE_COPILOT_CORS_ORIGINS:-http://localhost:3000}
+      KNOWLEDGE_COPILOT_EMBEDDING_PROVIDER: ${KNOWLEDGE_COPILOT_EMBEDDING_PROVIDER:-ollama}
+      KNOWLEDGE_COPILOT_EMBEDDING_MODEL: ${KNOWLEDGE_COPILOT_EMBEDDING_MODEL:-nomic-embed-text}
+      KNOWLEDGE_COPILOT_ANSWER_PROVIDER: ${KNOWLEDGE_COPILOT_ANSWER_PROVIDER:-local}
+      KNOWLEDGE_COPILOT_ANSWER_MODEL: ${KNOWLEDGE_COPILOT_ANSWER_MODEL:-heuristic}
+      KNOWLEDGE_COPILOT_RERANKER_PROVIDER: ${KNOWLEDGE_COPILOT_RERANKER_PROVIDER:-local}
+      KNOWLEDGE_COPILOT_RERANKER_MODEL: ${KNOWLEDGE_COPILOT_RERANKER_MODEL:-heuristic}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    ports:
+      - "8000:8000"
+    volumes:
+      - knowledge_copilot_data:/data
+    depends_on:
+      - ollama
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - knowledge_copilot_ollama:/root/.ollama
+
+volumes:
+  knowledge_copilot_data:
+  knowledge_copilot_ollama:

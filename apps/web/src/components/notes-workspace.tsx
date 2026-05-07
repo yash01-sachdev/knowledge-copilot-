@@ -3,9 +3,9 @@
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createNote, deleteNote, getNote, listNotes, loadDemoNotes, syncFolder, updateNote } from "@/lib/api";
+import { formatDate } from "@/lib/formatters";
 import { inferImportedNote } from "@/lib/import-notes";
 import type { NoteDraft, NoteSummary } from "@/lib/types";
-import { StatusBanner } from "./status-banner";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -16,20 +16,14 @@ const EMPTY_DRAFT: NoteDraft = {
   sourceName: null,
 };
 
-function formatDate(value: string): string {
-  return new Date(value).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 export function NotesWorkspace() {
   const [notes, setNotes] = useState<NoteSummary[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [draft, setDraft] = useState<NoteDraft>(EMPTY_DRAFT);
   const [busy, setBusy] = useState<"idle" | "list" | "save" | "sync" | "delete">("idle");
   const [folderPath, setFolderPath] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [status, setStatus] = useState<{ tone: "default" | "error" | "success"; message: string } | null>({
     tone: "default",
     message: "Paste a synced markdown folder path or start writing directly.",
@@ -42,6 +36,17 @@ export function NotesWorkspace() {
     () => notes.find((note) => note.id === selectedNoteId) ?? null,
     [notes, selectedNoteId],
   );
+  const filteredNotes = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return notes;
+    }
+
+    return notes.filter((note) => {
+      const source = note.source_name?.toLowerCase() ?? "";
+      return note.title.toLowerCase().includes(query) || source.includes(query);
+    });
+  }, [notes, searchQuery]);
 
   const wordCount = useMemo(() => {
     const trimmed = draft.content.trim();
@@ -276,107 +281,87 @@ export function NotesWorkspace() {
   }
 
   return (
-    <main className="page-frame flex flex-1 flex-col gap-5">
-      <section className="panel relative overflow-hidden rounded-[32px] px-6 py-6 sm:px-7 lg:px-8">
-        <div className="pointer-events-none absolute -right-10 top-8 h-44 w-44 rounded-full bg-accent-soft blur-3xl" />
-        <div className="pointer-events-none absolute bottom-0 left-10 h-32 w-32 rounded-full bg-warm-soft blur-3xl" />
+    <main className="flex min-h-screen flex-1 bg-[#090d0c] text-[#e5e7e6]">
+      <section className="flex w-full flex-col xl:grid xl:grid-cols-[420px_minmax(0,1fr)]">
+        <aside className="flex min-h-[100dvh] flex-col border-b border-[#1a2922] bg-[#0a0f0d] xl:border-b-0 xl:border-r">
+          <div className="border-b border-[#1a2922] px-6 py-6">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <h1 className="text-[2rem] font-semibold tracking-[-0.04em] text-foreground">Notes</h1>
+                <span className="rounded-full bg-[#15221d] px-3 py-1 text-[0.95rem] text-accent">{notes.length}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleNewNote}
+                className="rounded-full bg-[#41d693] px-5 py-3 text-[1rem] font-semibold text-[#08110f] transition hover:brightness-105"
+              >
+                + New Note
+              </button>
+            </div>
 
-        <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="kicker">Write</div>
-            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-[3.4rem]">
-              A real notes workspace, not a chatbot with a textbox.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-muted">
-              Capture entries quickly, keep the library tidy, and bring in markdown from your phone
-              without losing the calm feel of a real writing tool.
-            </p>
+            <label className="mt-6 block">
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search notes..."
+                className="w-full rounded-[18px] border border-[#1e2d28] bg-[#0f1714] px-4 py-3.5 text-[1.05rem] text-foreground outline-none transition placeholder:text-[#6f807c] focus:border-[#2f8f70]"
+              />
+            </label>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[520px]">
-            <div className="metric-card px-4 py-4">
-              <div className="kicker">Library</div>
-              <div className="mt-3 text-3xl font-semibold text-foreground">{notes.length}</div>
-              <p className="mt-2 text-sm leading-6 text-muted">indexed notes ready for retrieval</p>
-            </div>
-            <div className="metric-card px-4 py-4">
-              <div className="kicker">Capture</div>
-              <div className="mt-3 text-lg font-semibold text-foreground">Phone sync friendly</div>
-              <p className="mt-2 text-sm leading-6 text-muted">use any cloud-synced markdown folder</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleNewNote}
-              className="button-primary flex min-h-[138px] flex-col items-start justify-between px-4 py-4 text-left"
+          {status ? (
+            <div
+              className={`border-b px-6 py-3 text-[0.98rem] ${
+                status.tone === "error"
+                  ? "border-rose-500/20 bg-rose-500/8 text-rose-100"
+                  : status.tone === "success"
+                    ? "border-emerald-500/20 bg-emerald-500/8 text-emerald-100"
+                    : "border-[#1a2922] bg-[#0d1412] text-muted"
+              }`}
             >
-              <span className="kicker text-[rgba(7,16,24,0.72)]">Fresh entry</span>
-              <div>
-                <div className="text-xl font-semibold">New note</div>
-                <div className="mt-2 text-sm text-[rgba(7,16,24,0.72)]">
-                  Jump into a blank draft without losing the library.
-                </div>
-              </div>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {status ? <StatusBanner tone={status.tone} message={status.message} /> : null}
-
-      <section className="grid flex-1 gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
-        <aside className="panel flex min-h-[760px] flex-col overflow-hidden rounded-[30px]">
-          <div className="border-b border-white/8 px-5 py-5">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="kicker">Library</div>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Your note stack</h2>
-                <p className="mt-2 text-sm leading-7 text-muted">
-                  Switch between saved notes, synced entries, and fresh drafts without leaving the
-                  page.
-                </p>
-              </div>
-              <div className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs text-muted">
-                {notes.length} total
-              </div>
+              {status.message}
             </div>
-          </div>
+          ) : null}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-            {notes.length === 0 ? (
-              <div className="rounded-[24px] border border-dashed border-white/12 bg-white/[0.02] px-4 py-5 text-sm leading-7 text-muted">
-                No notes yet. Start a fresh note, import files, or sync a folder from a phone-friendly
-                markdown setup.
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {filteredNotes.length === 0 ? (
+              <div className="px-6 py-6 text-[1rem] leading-8 text-muted">
+                {notes.length === 0
+                  ? "No notes yet. Start a new note, import files, or load the demo set."
+                  : "No notes matched that search."}
               </div>
             ) : (
-              <div className="space-y-2">
-                {notes.map((note) => {
+              <div>
+                {filteredNotes.map((note) => {
                   const active = note.id === selectedNoteId;
                   return (
                     <button
                       key={note.id}
                       type="button"
                       onClick={() => void openNote(note.id)}
-                      className={`w-full rounded-[22px] border px-4 py-4 text-left transition ${
-                        active
-                          ? "border-accent/28 bg-[linear-gradient(135deg,rgba(131,225,197,0.12),rgba(255,255,255,0.04))] shadow-[0_18px_36px_rgba(4,16,12,0.16)]"
-                          : "border-transparent bg-transparent hover:border-white/10 hover:bg-white/[0.04]"
+                      className={`w-full border-b border-[#111b17] px-6 py-5 text-left transition ${
+                        active ? "bg-[#0f1814]" : "bg-transparent hover:bg-[#0c1411]"
                       }`}
                     >
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <div className="truncate text-sm font-semibold text-foreground">{note.title}</div>
-                          <div className="mt-1 text-xs text-muted">{formatDate(note.updated_at)}</div>
+                          <div className={`truncate text-[1.05rem] font-semibold ${active ? "text-accent" : "text-foreground"}`}>
+                            {note.title}
+                          </div>
+                          <div className="mt-2 flex items-center gap-2 text-[0.98rem] text-muted">
+                            <span>{formatDate(note.note_date, "short")}</span>
+                          </div>
+                          <div className="mt-2 truncate text-[0.98rem] text-muted">
+                            {note.source_name ? `Synced from ${note.source_name}` : "Manual note saved in the app"}
+                          </div>
                         </div>
                         <span
-                          className={`rounded-full px-2.5 py-1 text-[11px] uppercase tracking-[0.16em] ${
-                            active ? "bg-accent-soft text-accent" : "bg-white/[0.04] text-muted"
+                          className={`rounded-lg px-2.5 py-1 text-[0.78rem] font-medium uppercase tracking-[0.12em] ${
+                            note.source_name ? "bg-[#123126] text-[#55dba0]" : "bg-[#17201d] text-[#7f908c]"
                           }`}
                         >
                           {note.source_name ? "synced" : "manual"}
                         </span>
-                      </div>
-                      <div className="mt-3 text-xs text-muted">
-                        {note.source_name ? note.source_name : `${note.chunk_count} indexed chunks`}
                       </div>
                     </button>
                   );
@@ -385,35 +370,43 @@ export function NotesWorkspace() {
             )}
           </div>
 
-          <div className="border-t border-white/8 px-4 py-4">
-            <div className="rounded-[24px] border border-white/8 bg-black/10 p-4">
-              <div className="kicker">Sync toolkit</div>
-              <p className="mt-3 text-sm leading-7 text-muted">
-                Point this at any cloud-synced markdown or text folder if you want the same notes on
-                your phone and here.
-              </p>
+          <div className="border-t border-[#1a2922] px-6 py-4">
+            <button
+              type="button"
+              onClick={() => setToolsOpen((current) => !current)}
+              className="flex w-full items-center justify-between text-left text-[0.98rem] text-muted transition hover:text-foreground"
+            >
+              <span>Phone sync folder tools</span>
+              <span>{toolsOpen ? "−" : "+"}</span>
+            </button>
 
-              <label className="mt-4 block">
-                <span className="kicker">Phone sync folder</span>
+            {toolsOpen ? (
+              <div className="mt-4 space-y-3">
                 <input
                   value={folderPath}
                   onChange={(event) => setFolderPath(event.target.value)}
-                  placeholder="E:\\notes-sync\\mobile-vault"
-                  className="field-input mt-2 px-3 py-3 text-sm"
+                  placeholder="path/to/notes-folder"
+                  className="w-full rounded-[16px] border border-[#1e2d28] bg-[#0f1714] px-4 py-3 text-[0.98rem] text-foreground outline-none transition placeholder:text-[#6f807c] focus:border-[#2f8f70]"
                 />
-              </label>
-
-              <button
-                type="button"
-                onClick={() => void handleSyncFolder()}
-                disabled={busy !== "idle"}
-                className="button-secondary mt-3 w-full px-4 py-3 text-sm disabled:opacity-60"
-              >
-                Sync folder
-              </button>
-
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <label className="button-secondary cursor-pointer px-4 py-3 text-center text-sm">
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleSyncFolder()}
+                    disabled={busy !== "idle"}
+                    className="rounded-[16px] border border-[#1f5d49] bg-[#123126] px-4 py-3 text-[0.95rem] font-medium text-accent transition hover:bg-[#173e30] disabled:opacity-60"
+                  >
+                    Sync folder
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleLoadDemo()}
+                    disabled={busy !== "idle"}
+                    className="rounded-[16px] border border-[#1e2d28] bg-[#111816] px-4 py-3 text-[0.95rem] font-medium text-foreground transition hover:bg-[#17211d] disabled:opacity-60"
+                  >
+                    Demo notes
+                  </button>
+                </div>
+                <label className="block cursor-pointer rounded-[16px] border border-[#1e2d28] bg-[#111816] px-4 py-3 text-center text-[0.95rem] font-medium text-foreground transition hover:bg-[#17211d]">
                   Import files
                   <input
                     type="file"
@@ -423,105 +416,68 @@ export function NotesWorkspace() {
                     onChange={(event) => void handleImportFiles(event.target.files)}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={() => void handleLoadDemo()}
-                  disabled={busy !== "idle"}
-                  className="button-secondary px-4 py-3 text-sm disabled:opacity-60"
-                >
-                  Demo notes
-                </button>
               </div>
-            </div>
+            ) : null}
           </div>
         </aside>
 
-        <section className="panel flex min-h-[760px] flex-col overflow-hidden rounded-[30px]">
-          <div className="border-b border-white/8 px-5 py-5 sm:px-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className="kicker">Editor</div>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-                    {selectedNote ? selectedNote.title : "Drafting a new note"}
-                  </h2>
-                  <span className="rounded-full border border-white/8 bg-white/[0.03] px-3 py-1 text-xs uppercase tracking-[0.16em] text-muted">
-                    {selectedNote ? "selected note" : "blank draft"}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm leading-7 text-muted">
-                  {selectedNote
-                    ? selectedNote.source_path || "Manual note stored inside the app."
-                    : "Write naturally. Retrieval, chunking, linking, and timeline features happen after the note is saved."}
-                </p>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-3 lg:min-w-[420px]">
-                <div className="metric-card px-4 py-3">
-                  <div className="kicker">Words</div>
-                  <div className="mt-2 text-2xl font-semibold text-foreground">{wordCount}</div>
-                </div>
-                <div className="metric-card px-4 py-3">
-                  <div className="kicker">Chars</div>
-                  <div className="mt-2 text-2xl font-semibold text-foreground">{characterCount}</div>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleSave()}
-                    disabled={busy !== "idle"}
-                    className="button-primary px-4 py-3 text-sm disabled:opacity-60"
-                  >
-                    {busy === "save" ? "Saving..." : selectedNoteId ? "Save changes" : "Save note"}
-                  </button>
-                  {selectedNoteId ? (
-                    <button
-                      type="button"
-                      onClick={() => void handleDelete()}
-                      disabled={busy !== "idle"}
-                      className="rounded-2xl border border-rose-400/22 bg-rose-500/10 px-4 py-3 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/14 disabled:opacity-60"
-                    >
-                      {busy === "delete" ? "Deleting..." : "Delete note"}
-                    </button>
-                  ) : (
-                    <div className="metric-card flex items-center justify-center px-4 py-3 text-sm text-muted">
-                      draft not saved yet
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-4 px-5 py-5 md:grid-cols-[minmax(0,1fr)_220px] sm:px-6">
-            <label className="block">
-              <span className="kicker">Title</span>
+        <section className="flex min-h-[100dvh] flex-col bg-[#090d0c]">
+          <div className="flex flex-wrap items-center gap-4 border-b border-[#1a2922] px-6 py-5">
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 text-[0.92rem] uppercase tracking-[0.16em] text-muted">Editor</div>
               <input
                 value={draft.title}
                 onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
                 placeholder="Morning reset after a rough week"
-                className="field-input mt-2 px-4 py-3 text-base"
+                className="w-full bg-transparent text-[2rem] font-semibold tracking-[-0.04em] text-foreground outline-none placeholder:text-[#7a8a86]"
               />
-            </label>
+              <div className="mt-2 text-[0.98rem] text-muted">
+                {selectedNote ? selectedNote.source_path || "Manual note stored inside the app" : "Drafting a new note"}
+              </div>
+            </div>
 
-            <label className="block">
-              <span className="kicker">Date</span>
+            <div className="flex flex-wrap items-center gap-3">
               <input
                 type="date"
                 value={draft.noteDate}
                 onChange={(event) => setDraft((current) => ({ ...current, noteDate: event.target.value }))}
-                className="field-input mt-2 px-4 py-3 text-base"
+                className="rounded-[16px] border border-[#1e2d28] bg-[#0f1714] px-4 py-3 text-[1rem] text-muted outline-none transition focus:border-[#2f8f70]"
               />
-            </label>
+              <button
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={busy !== "idle"}
+                className="rounded-[16px] bg-[#1f7a56] px-5 py-3 text-[1rem] font-semibold text-foreground transition hover:brightness-105 disabled:opacity-60"
+              >
+                {busy === "save" ? "Saving..." : "Save note"}
+              </button>
+              {selectedNoteId ? (
+                <button
+                  type="button"
+                  onClick={() => void handleDelete()}
+                  disabled={busy !== "idle"}
+                  className="rounded-[16px] bg-[#311414] px-4 py-3 text-[1rem] font-semibold text-rose-100 transition hover:bg-[#3c1717] disabled:opacity-60"
+                >
+                  {busy === "delete" ? "Deleting..." : "Delete note"}
+                </button>
+              ) : null}
+            </div>
           </div>
 
-          <div className="min-h-0 flex-1 px-5 pb-5 sm:px-6">
+          <div className="min-h-0 flex-1 px-6 py-6">
             <textarea
               value={draft.content}
               onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))}
               placeholder="Write naturally. The system will chunk, index, link, and summarize later."
-              className="field-textarea h-full min-h-[520px] resize-none px-5 py-5 text-[15px] leading-8"
+              className="h-full min-h-[520px] w-full resize-none bg-transparent text-[1.18rem] leading-[2.2rem] text-foreground outline-none placeholder:text-[#667874]"
             />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#1a2922] px-6 py-4 text-[0.98rem] text-muted">
+            <span>{selectedNote?.source_path ?? (selectedNoteId ? "Manual note stored inside the app" : "Unsaved draft")}</span>
+            <span>
+              {wordCount} words • {characterCount} characters
+            </span>
           </div>
         </section>
       </section>

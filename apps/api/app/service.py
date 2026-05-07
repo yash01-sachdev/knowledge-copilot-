@@ -12,6 +12,7 @@ from .memory_graph import build_memory_overview
 from .providers import (
     AnswerProvider,
     EmbeddingProvider,
+    LocalAnswerProvider,
     RerankItem,
     RerankRequest,
     RerankerProvider,
@@ -58,7 +59,8 @@ class KnowledgeService:
         self.search_engine = HybridSearchEngine()
         self.memory_overview = MemoryOverviewResponse(total_notes=0)
         self.embedding_provider = embedding_provider if embedding_provider is not None else build_embedding_provider(self.settings)
-        self.answer_provider = answer_provider if answer_provider is not None else build_answer_provider(self.settings)
+        self.fast_answer_provider = LocalAnswerProvider()
+        self.quality_answer_provider = answer_provider if answer_provider is not None else build_answer_provider(self.settings)
         self.reranker_provider = reranker_provider if reranker_provider is not None else build_reranker_provider(self.settings)
         self.refresh_state()
 
@@ -123,8 +125,10 @@ class KnowledgeService:
         return response
 
     def answer_question_with_diagnostics(self, payload: QueryRequest) -> tuple[QueryResponse, QueryDiagnostics]:
-        semantic_limit = max(payload.top_k * 2, self.settings.semantic_limit)
-        keyword_limit = max(payload.top_k * 2, self.settings.keyword_limit)
+        quality_mode = payload.mode == "quality"
+        semantic_limit = max(payload.top_k * (3 if quality_mode else 2), self.settings.semantic_limit + (4 if quality_mode else 0))
+        keyword_limit = max(payload.top_k * (3 if quality_mode else 2), self.settings.keyword_limit + (4 if quality_mode else 0))
+        answer_provider = self.quality_answer_provider if quality_mode else self.fast_answer_provider
 
         total_start = perf_counter()
         retrieval_start = perf_counter()
@@ -135,10 +139,10 @@ class KnowledgeService:
         )
         keyword_hits = self.repository.keyword_search(payload.question, limit=keyword_limit)
         candidates = merge_candidates(semantic_hits, keyword_hits)
-        reranked = rerank_candidates(payload.question, candidates)
+        reranked = rerank_candidates(payload.question, candidates, mode=payload.mode)
         rerank_latency_ms = 0.0
-        reranker_mode = "local-heuristic"
-        if self.reranker_provider is not None and reranked:
+        reranker_mode = f"local-smart:{payload.mode}"
+        if self.reranker_provider is not None and quality_mode and reranked:
             rerank_start = perf_counter()
             reranked, reranker_mode = self._apply_provider_reranker(payload.question, reranked)
             rerank_latency_ms = (perf_counter() - rerank_start) * 1000
@@ -149,25 +153,27 @@ class KnowledgeService:
         response = compose_answer(
             payload.question,
             top_candidates,
-            answer_provider=self.answer_provider,
+            answer_provider=answer_provider,
         )
         generation_latency_ms = (perf_counter() - generation_start) * 1000
         total_latency_ms = (perf_counter() - total_start) * 1000
 
         diagnostics = QueryDiagnostics(
+            query_mode=payload.mode,
             retrieval_latency_ms=round(retrieval_latency_ms, 3),
             rerank_latency_ms=round(rerank_latency_ms, 3),
             generation_latency_ms=round(generation_latency_ms, 3),
             total_latency_ms=round(total_latency_ms, 3),
             semantic_mode=semantic_mode,
             reranker_mode=reranker_mode,
-            answer_provider=f"{self.answer_provider.provider_name}:{self.answer_provider.model_name}",
+            answer_provider=f"{answer_provider.provider_name}:{answer_provider.model_name}",
             citation_count=len(response.citations),
             insufficient_evidence=response.insufficient_evidence,
         )
         response = response.model_copy(
             update={
                 "diagnostics": QueryDiagnosticsResponse(
+                    query_mode=diagnostics.query_mode,
                     retrieval_latency_ms=diagnostics.retrieval_latency_ms,
                     rerank_latency_ms=diagnostics.rerank_latency_ms,
                     generation_latency_ms=diagnostics.generation_latency_ms,
@@ -356,7 +362,7 @@ class KnowledgeService:
         candidates: list[SearchCandidate],
     ) -> tuple[list[SearchCandidate], str]:
         if self.reranker_provider is None:
-            return candidates, "local-heuristic"
+            return candidates, "local-smart"
 
         selected = candidates[: self.settings.reranker_limit]
         try:
@@ -376,7 +382,7 @@ class KnowledgeService:
                 )
             )
         except Exception:
-            return candidates, "local-heuristic"
+            return candidates, "local-smart"
 
         scores = {item.chunk_id: item.score for item in reranked}
         for candidate in selected:

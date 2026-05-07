@@ -41,6 +41,7 @@ class NoteRecord:
 
 @dataclass(frozen=True, slots=True)
 class QueryDiagnostics:
+    query_mode: str
     retrieval_latency_ms: float
     rerank_latency_ms: float
     generation_latency_ms: float

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from pydantic import BaseModel, Field, field_validator
+from typing import Literal
 
 
 class NoteCreate(BaseModel):
@@ -53,6 +54,7 @@ class NoteUpdate(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(min_length=5, max_length=500)
     top_k: int = Field(default=5, ge=3, le=8)
+    mode: Literal["fast", "quality"] = "fast"
 
     @field_validator("question")
     @classmethod
@@ -140,6 +142,7 @@ class MemoryOverviewResponse(BaseModel):
 
 
 class QueryDiagnosticsResponse(BaseModel):
+    query_mode: Literal["fast", "quality"]
     retrieval_latency_ms: float
     rerank_latency_ms: float
     generation_latency_ms: float

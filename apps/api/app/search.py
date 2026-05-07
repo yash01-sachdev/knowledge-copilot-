@@ -9,7 +9,7 @@ from sklearn.preprocessing import normalize
 
 from .domain import ChunkRecord, SearchCandidate
 from .providers import EmbeddingProvider
-from .text_utils import build_match_terms, clamp, tokenize
+from .text_utils import build_match_terms, clamp, extract_ranked_sentences, tokenize
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,9 +46,72 @@ def analyze_query(question: str) -> QueryProfile:
     )
 
 
+ACTION_ALIGNMENT_MARKERS = {
+    "try",
+    "start",
+    "keep",
+    "review",
+    "focus",
+    "return",
+    "pick",
+    "choose",
+    "stop",
+    "avoid",
+    "define",
+    "finish",
+    "ship",
+    "recover",
+}
+
+PATTERN_ALIGNMENT_MARKERS = {
+    "pattern",
+    "patterns",
+    "repeat",
+    "recurring",
+    "usually",
+    "trend",
+    "trends",
+    "consistently",
+}
+
+
 def _normalize_query_text(question: str) -> str:
     terms = build_match_terms(question)
     return " ".join(terms) if terms else question
+
+
+def _build_query_phrases(question: str) -> set[str]:
+    terms = build_match_terms(question)
+    phrases: set[str] = set()
+    for size in (2, 3):
+        if len(terms) < size:
+            continue
+        for index in range(len(terms) - size + 1):
+            phrases.add(" ".join(terms[index : index + size]))
+    return phrases
+
+
+def _phrase_match_score(text: str, phrases: set[str]) -> float:
+    if not phrases:
+        return 0.0
+    normalized_text = " ".join(build_match_terms(text))
+    matches = sum(1 for phrase in phrases if phrase in normalized_text)
+    return matches / max(len(phrases), 1)
+
+
+def _best_sentence_focus(text: str, query_terms: set[str], query_phrases: set[str]) -> float:
+    best_score = 0.0
+    for sentence in extract_ranked_sentences(text, query_terms, limit=3):
+        sentence_terms = set(build_match_terms(sentence))
+        overlap = len(sentence_terms & query_terms) / max(len(query_terms), 1)
+        phrase_match = _phrase_match_score(sentence, query_phrases)
+        best_score = max(best_score, (0.72 * overlap) + (0.28 * phrase_match))
+    return best_score
+
+
+def _has_alignment_marker(text: str, markers: set[str]) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in markers)
 
 
 class HybridSearchEngine:
@@ -217,8 +280,14 @@ def merge_candidates(
     return list(merged.values())
 
 
-def rerank_candidates(question: str, candidates: list[SearchCandidate]) -> list[SearchCandidate]:
+def rerank_candidates(
+    question: str,
+    candidates: list[SearchCandidate],
+    *,
+    mode: str = "fast",
+) -> list[SearchCandidate]:
     query_terms = set(build_match_terms(question))
+    query_phrases = _build_query_phrases(question)
     profile = analyze_query(question)
     if not candidates:
         return []
@@ -232,27 +301,61 @@ def rerank_candidates(question: str, candidates: list[SearchCandidate]) -> list[
         title_terms = set(tokenize(candidate.title))
         overlap = len(query_terms & content_terms) / max(len(query_terms), 1)
         title_overlap = len(query_terms & title_terms) / max(len(query_terms), 1)
+        phrase_overlap = _phrase_match_score(f"{candidate.title}\n{candidate.content}", query_phrases)
+        sentence_focus = _best_sentence_focus(candidate.content, query_terms, query_phrases)
+        action_alignment = (
+            1.0 if profile.is_action_query and _has_alignment_marker(candidate.content, ACTION_ALIGNMENT_MARKERS) else 0.0
+        )
+        pattern_alignment = (
+            1.0 if profile.is_pattern_query and _has_alignment_marker(candidate.content, PATTERN_ALIGNMENT_MARKERS) else 0.0
+        )
         recency = 0.0
         if profile.wants_recent_bias:
             recency = (candidate.note_date - oldest_note_date).days / date_span_days
+        intent_alignment = max(action_alignment, pattern_alignment)
 
-        candidate.rerank_score = clamp(
-            (0.48 * candidate.semantic_score)
-            + (0.24 * candidate.keyword_score)
-            + (0.14 * overlap)
-            + (0.08 * title_overlap)
-            + (0.06 * recency),
-            0.0,
-            1.0,
-        )
+        if mode == "quality":
+            candidate.rerank_score = clamp(
+                (0.3 * candidate.semantic_score)
+                + (0.16 * candidate.keyword_score)
+                + (0.12 * overlap)
+                + (0.08 * title_overlap)
+                + (0.14 * phrase_overlap)
+                + (0.14 * sentence_focus)
+                + (0.04 * intent_alignment)
+                + (0.02 * recency),
+                0.0,
+                1.0,
+            )
+        else:
+            candidate.rerank_score = clamp(
+                (0.36 * candidate.semantic_score)
+                + (0.2 * candidate.keyword_score)
+                + (0.14 * overlap)
+                + (0.1 * title_overlap)
+                + (0.1 * phrase_overlap)
+                + (0.07 * sentence_focus)
+                + (0.02 * intent_alignment)
+                + (0.01 * recency),
+                0.0,
+                1.0,
+            )
 
         reasons: list[str] = []
         if candidate.semantic_score >= 0.55:
             reasons.append("strong semantic match")
         if candidate.keyword_score >= 0.55:
             reasons.append("direct keyword overlap")
+        if phrase_overlap >= 0.34:
+            reasons.append("phrase match")
+        if sentence_focus >= 0.42:
+            reasons.append("direct sentence hit")
         if title_overlap > 0:
             reasons.append("title overlap")
+        if action_alignment > 0:
+            reasons.append("action cue")
+        if pattern_alignment > 0:
+            reasons.append("pattern cue")
         if profile.wants_recent_bias and recency > 0.65:
             reasons.append("recent note")
         candidate.reason = ", ".join(reasons) or "supporting context"

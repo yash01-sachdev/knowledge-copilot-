@@ -1,30 +1,37 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { askQuestion, listNotes, submitFeedback } from "@/lib/api";
-import type { QueryResponse } from "@/lib/types";
+import type { QueryMode, QueryResponse } from "@/lib/types";
 import { AnswerPanel } from "./answer-panel";
-import { StatusBanner } from "./status-banner";
 
 const SUGGESTIONS = [
-  "What patterns keep repeating in my notes?",
-  "Based on my old notes, what usually helps me recover momentum?",
-  "What have I written about interview prep lately?",
+  "What should I focus on this week?",
+  "What are my recurring productivity patterns?",
+  "How has my thinking on interview prep changed?",
+  "What usually helps me recover momentum?",
 ];
+
+type StatusState = {
+  tone: "error" | "success";
+  message: string;
+} | null;
+
+function getStatusClassName(tone: "error" | "success") {
+  return tone === "error" ? "text-rose-300" : "text-emerald-300";
+}
 
 export function AskWorkspace() {
   const [question, setQuestion] = useState("");
+  const [mode, setMode] = useState<QueryMode>("fast");
   const [submittedQuestion, setSubmittedQuestion] = useState("");
   const [answer, setAnswer] = useState<QueryResponse | null>(null);
   const [noteCount, setNoteCount] = useState<number>(0);
   const [busy, setBusy] = useState<"idle" | "query" | "feedback">("idle");
   const [feedbackState, setFeedbackState] = useState<"idle" | "sending" | "saved">("idle");
-  const [status, setStatus] = useState<{ tone: "default" | "error" | "success"; message: string } | null>({
-    tone: "default",
-    message: "Ask tightly. The answer page is for grounded responses, and the memory page is for the bigger picture.",
-  });
+  const [status, setStatus] = useState<StatusState>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -40,6 +47,17 @@ export function AskWorkspace() {
     })();
   }, []);
 
+  useEffect(() => {
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    textarea.style.height = "0px";
+    textarea.style.height = `${Math.max(148, textarea.scrollHeight)}px`;
+  }, [question]);
+
   async function handleAsk() {
     const trimmedQuestion = question.trim();
 
@@ -49,29 +67,26 @@ export function AskWorkspace() {
       setFeedbackState("idle");
       setStatus({
         tone: "error",
-        message: "No grounded answer yet. Ask with a topic, phrase, or event that actually appears in your notes.",
+        message: "Ask with a topic, phrase, or event that actually appears in your notes.",
       });
       return;
     }
 
     setBusy("query");
     setFeedbackState("idle");
+    setStatus(null);
+
     try {
-      const nextAnswer = await askQuestion(trimmedQuestion);
+      const nextAnswer = await askQuestion(trimmedQuestion, mode);
       setAnswer(nextAnswer);
       setSubmittedQuestion(trimmedQuestion);
-      setStatus(
-        nextAnswer.insufficient_evidence || nextAnswer.citations.length === 0
-          ? {
-              tone: "error",
-              message:
-                "No notes linked strongly enough to that question yet. Try a phrase or topic that actually appears in your notes.",
-            }
-          : {
-              tone: "success",
-              message: "Answer generated from ranked note evidence.",
-            },
-      );
+
+      if (nextAnswer.insufficient_evidence || nextAnswer.citations.length === 0) {
+        setStatus({
+          tone: "error",
+          message: "No notes linked strongly enough to that question yet.",
+        });
+      }
     } catch (error) {
       setAnswer(null);
       setSubmittedQuestion("");
@@ -88,10 +103,16 @@ export function AskWorkspace() {
     if (!answer) {
       return;
     }
+
     setFeedbackState("sending");
+
     try {
-      await submitFeedback({ question, answer: answer.answer, useful });
+      await submitFeedback({ question: submittedQuestion, answer: answer.answer, useful });
       setFeedbackState("saved");
+      setStatus({
+        tone: "success",
+        message: "Feedback saved for future tuning.",
+      });
     } catch (error) {
       setStatus({
         tone: "error",
@@ -102,101 +123,96 @@ export function AskWorkspace() {
   }
 
   return (
-    <main className="page-frame flex flex-1 flex-col gap-5">
-      <section className="panel relative overflow-hidden rounded-[32px] px-6 py-6 sm:px-7 lg:px-8">
-        <div className="pointer-events-none absolute -left-8 bottom-0 h-40 w-40 rounded-full bg-warm-soft blur-3xl" />
-        <div className="pointer-events-none absolute right-0 top-0 h-48 w-48 rounded-full bg-accent-soft blur-3xl" />
-
-        <div className="relative grid gap-6 xl:grid-cols-[1.08fr_0.92fr] xl:items-end">
-          <div className="max-w-3xl">
-            <div className="kicker">Ask</div>
-            <h1 className="mt-3 text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-[3.2rem]">
-              Ask one sharp question and keep the answer tied to your actual notes.
-            </h1>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-muted">
-              This page is for grounded recall, not vague brainstorming. Pull out specific moments,
-              topics, and decisions from your note base with ranked evidence and citations.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="metric-card px-4 py-4">
-              <div className="kicker">Indexed notes</div>
-              <div className="mt-3 text-3xl font-semibold text-foreground">{noteCount}</div>
-              <p className="mt-2 text-sm leading-6 text-muted">available for retrieval right now</p>
-            </div>
-            <div className="metric-card px-4 py-4">
-              <div className="kicker">Answer style</div>
-              <div className="mt-3 text-lg font-semibold text-foreground">Grounded only</div>
-              <p className="mt-2 text-sm leading-6 text-muted">weak evidence should stay weak</p>
-            </div>
-            <Link
-              href="/memory"
-              prefetch={false}
-              className="panel-soft rounded-[24px] px-4 py-4 transition hover:-translate-y-0.5 hover:border-accent/30 hover:bg-white/[0.04]"
-            >
-              <div className="kicker">Context</div>
-              <div className="mt-3 text-lg font-semibold text-foreground">Open memory view</div>
-              <p className="mt-2 text-sm leading-6 text-muted">timeline, note links, and recurring themes</p>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {status ? <StatusBanner tone={status.tone} message={status.message} /> : null}
-
-      <section className="grid gap-5 xl:grid-cols-[390px_minmax(0,1fr)]">
-        <aside className="panel flex flex-col rounded-[30px] p-6">
-          <div className="kicker">Query composer</div>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Frame the question</h2>
-          <p className="mt-3 text-sm leading-7 text-muted">
-            Use one concrete topic, phrase, or event. If your notes never mention it, the answer
-            should say so instead of making something up.
+    <main className="page-frame flex flex-1 justify-center px-4 pb-20 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+      <div className="w-full max-w-[860px]">
+        <section className="text-center">
+          <h1 className="text-4xl font-semibold tracking-[-0.04em] text-foreground sm:text-[3.2rem]">
+            Knowledge Copilot
+          </h1>
+          <p className="mt-3 text-lg leading-8 text-muted sm:text-xl">
+            Ask questions grounded in your personal notes
           </p>
+        </section>
 
-          <label className="mt-6 block">
-            <span className="kicker">Question</span>
+        <section className="mt-14">
+          <div className="kicker">Ask your notes</div>
+
+          <div className="mt-4 overflow-hidden rounded-[28px] border border-white/8 bg-[rgba(10,18,17,0.64)] shadow-[0_22px_60px_rgba(1,6,14,0.24)]">
             <textarea
+              ref={textareaRef}
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
-              rows={8}
-              placeholder="What should I focus on this week based on my notes?"
-              className="field-textarea mt-2 px-4 py-4 text-sm leading-7"
+              rows={4}
+              placeholder="What should I focus on this week?"
+              className="field-textarea min-h-[148px] resize-none rounded-none border-0 bg-transparent px-6 py-5 text-[1.15rem] leading-9 text-foreground shadow-none placeholder:text-[rgba(150,168,188,0.36)] focus:bg-transparent focus:shadow-none"
             />
-          </label>
+          </div>
 
-          <div className="mt-4 flex flex-wrap gap-2">
-            {SUGGESTIONS.map((item) => (
-              <button
-                key={item}
-                type="button"
-                onClick={() => setQuestion(item)}
-                className="button-ghost px-3 py-1.5 text-xs"
-              >
-                {item}
-              </button>
-            ))}
+          <div className="mt-4 overflow-x-auto pb-2">
+            <div className="mb-4 flex gap-2">
+              {(["fast", "quality"] as const).map((item) => {
+                const active = mode === item;
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setMode(item)}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                      active
+                        ? "bg-[rgba(65,214,147,0.14)] text-foreground shadow-[inset_0_0_0_1px_rgba(65,214,147,0.24)]"
+                        : "border border-white/8 bg-white/[0.02] text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {item === "fast" ? "Fast mode" : "Quality mode"}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex min-w-max gap-3">
+              {SUGGESTIONS.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setQuestion(item)}
+                  className="button-ghost whitespace-nowrap px-5 py-3 text-[1.05rem] leading-7 text-foreground/85"
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
           </div>
 
           <button
             type="button"
+            aria-label="Ask notes"
             onClick={() => void handleAsk()}
             disabled={busy !== "idle"}
-            className="button-primary mt-6 px-4 py-3 text-sm disabled:opacity-60"
+            className="button-primary mt-5 flex w-full items-center justify-center gap-3 rounded-[22px] px-6 py-4 text-[1.2rem] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {busy === "query" ? "Searching notes..." : "Ask notes"}
+            <span>{busy === "query" ? "Searching notes..." : "Ask my notes"}</span>
+            <span aria-hidden="true" className="text-[1.5rem] leading-none">
+              →
+            </span>
           </button>
 
-          <div className="mt-4 rounded-[24px] border border-white/8 bg-black/10 px-4 py-4">
-            <div className="kicker">Reminder</div>
-            <p className="mt-3 text-sm leading-7 text-muted">
-              If you want broader patterns instead of one answer, jump to the memory page. The ask
-              page is intentionally narrow.
-            </p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm leading-7 text-muted">
+            <div>
+              <span className="text-foreground/85">Indexed notes</span>: {noteCount}
+            </div>
+            <div>
+              {mode === "fast"
+                ? "Fast mode keeps the local heuristic writer for speed."
+                : "Quality mode uses Ollama answer writing and deeper reranking."}
+            </div>
           </div>
-        </aside>
 
-        <div className="flex flex-col gap-5">
+          {status ? (
+            <p className={`mt-4 text-sm leading-7 ${getStatusClassName(status.tone)}`}>{status.message}</p>
+          ) : null}
+        </section>
+
+        <div className="mt-16">
           <AnswerPanel
             answer={answer}
             question={submittedQuestion}
@@ -204,7 +220,7 @@ export function AskWorkspace() {
             onFeedback={(useful) => void handleFeedback(useful)}
           />
         </div>
-      </section>
+      </div>
     </main>
   );
 }

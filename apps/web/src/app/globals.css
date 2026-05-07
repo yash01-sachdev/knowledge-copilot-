@@ -48,6 +48,7 @@
 
 html {
   scroll-behavior: auto;
+  font-size: 17px;
 }
 
 body {
@@ -60,6 +61,7 @@ body {
     linear-gradient(180deg, #071019 0%, #08121d 42%, #081019 100%);
   color: var(--foreground);
   font-family: var(--font-plex-sans), sans-serif;
+  line-height: 1.6;
 }
 
 body::before,
@@ -154,8 +156,8 @@ textarea {
 
 .kicker {
   font-family: var(--font-plex-mono), monospace;
-  font-size: 0.72rem;
-  letter-spacing: 0.22em;
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent);
 }
