@@ -38,10 +38,21 @@ jobs:
           cp -R apps/api/app .hf-space-build/app
           chmod +x .hf-space-build/start.sh
 
-      - uses: huggingface/hub-sync@v0.1.0
-        with:
-          github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: ${{ vars.HF_SPACE_REPO_ID }}
-          hf_token: ${{ secrets.HF_TOKEN }}
-          space_sdk: docker
-          subdirectory: .hf-space-build
+      - name: Push bundle to Hugging Face Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO_ID: ${{ vars.HF_SPACE_REPO_ID }}
+        run: |
+          git clone https://oauth2:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE_REPO_ID} .hf-space-repo
+          find .hf-space-repo -mindepth 1 -maxdepth 1 ! -name ".git" -exec rm -rf {} +
+          cp -R .hf-space-build/. .hf-space-repo/
+          cd .hf-space-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+            git commit -m "Sync from GitHub ${GITHUB_SHA}"
+            git push origin main
+          else
+            echo "No Space changes to push."
+          fi
