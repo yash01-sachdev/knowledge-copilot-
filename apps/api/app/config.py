@@ -33,7 +33,8 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
-        repo_root = Path(__file__).resolve().parents[3]
+        resolved_file = Path(__file__).resolve()
+        repo_root = resolved_file.parents[3] if len(resolved_file.parents) > 3 else Path.cwd()
         data_dir = Path(os.getenv("KNOWLEDGE_COPILOT_DATA_DIR", repo_root / "data"))
         database_path = Path(
             os.getenv("KNOWLEDGE_COPILOT_DB_PATH", data_dir / "knowledge_copilot.db")
