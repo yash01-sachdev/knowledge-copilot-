@@ -11,6 +11,9 @@ class Settings:
     data_dir: Path
     database_path: Path
     cors_origins: tuple[str, ...]
+    vector_store_provider: str = "chroma"
+    chroma_path: Path = Path("./data/chroma")
+    chroma_collection_name: str = "knowledge_copilot_chunks"
     semantic_limit: int = 12
     keyword_limit: int = 12
     answer_limit: int = 6
@@ -51,6 +54,12 @@ class Settings:
             data_dir=data_dir,
             database_path=database_path,
             cors_origins=cors_origins,
+            vector_store_provider=os.getenv("KNOWLEDGE_COPILOT_VECTOR_STORE", "chroma").strip().lower(),
+            chroma_path=Path(os.getenv("KNOWLEDGE_COPILOT_CHROMA_PATH", data_dir / "chroma")),
+            chroma_collection_name=os.getenv(
+                "KNOWLEDGE_COPILOT_CHROMA_COLLECTION",
+                "knowledge_copilot_chunks",
+            ).strip(),
             embedding_provider=os.getenv("KNOWLEDGE_COPILOT_EMBEDDING_PROVIDER", "local").strip().lower(),
             embedding_model=os.getenv("KNOWLEDGE_COPILOT_EMBEDDING_MODEL", "text-embedding-3-small").strip(),
             answer_provider=os.getenv("KNOWLEDGE_COPILOT_ANSWER_PROVIDER", "local").strip().lower(),

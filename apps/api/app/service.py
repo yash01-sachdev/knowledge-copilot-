@@ -39,6 +39,7 @@ from .schemas import (
 )
 from .search import HybridSearchEngine, merge_candidates, rerank_candidates
 from .text_utils import chunk_text, normalize_whitespace
+from .vector_store import VectorStore, build_vector_store
 
 
 DATE_PATTERN = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
@@ -53,6 +54,7 @@ class KnowledgeService:
         embedding_provider: EmbeddingProvider | None = None,
         answer_provider: AnswerProvider | None = None,
         reranker_provider: RerankerProvider | None = None,
+        vector_store: VectorStore | None = None,
     ) -> None:
         self.repository = repository
         self.settings = settings or Settings.from_env()
@@ -62,12 +64,15 @@ class KnowledgeService:
         self.fast_answer_provider = LocalAnswerProvider()
         self.quality_answer_provider = answer_provider if answer_provider is not None else build_answer_provider(self.settings)
         self.reranker_provider = reranker_provider if reranker_provider is not None else build_reranker_provider(self.settings)
+        self.vector_store = vector_store if vector_store is not None else build_vector_store(self.settings)
         self.refresh_state()
 
     def refresh_state(self) -> None:
         chunks = self.repository.fetch_all_chunks()
         hydrated_chunks = self._ensure_chunk_embeddings(chunks)
         self.search_engine.rebuild(hydrated_chunks)
+        if self.vector_store is not None and self.embedding_provider is not None:
+            self.vector_store.replace_chunks(hydrated_chunks)
         notes = self.repository.fetch_all_notes()
         link_feedback = self.repository.list_note_link_feedback()
         graph_result = build_memory_overview(notes, link_feedback)
@@ -132,11 +137,7 @@ class KnowledgeService:
 
         total_start = perf_counter()
         retrieval_start = perf_counter()
-        semantic_hits, semantic_mode = self.search_engine.semantic_search_with_mode(
-            payload.question,
-            limit=semantic_limit,
-            embedding_provider=self.embedding_provider,
-        )
+        semantic_hits, semantic_mode = self._semantic_search(payload.question, limit=semantic_limit)
         keyword_hits = self.repository.keyword_search(payload.question, limit=keyword_limit)
         candidates = merge_candidates(semantic_hits, keyword_hits)
         reranked = rerank_candidates(payload.question, candidates, mode=payload.mode)
@@ -395,3 +396,29 @@ class KnowledgeService:
                 candidate.reason = f"{candidate.reason}, provider rerank".strip(", ")
         updated = sorted(candidates, key=lambda item: item.rerank_score, reverse=True)
         return updated, f"{self.reranker_provider.provider_name}:{self.reranker_provider.model_name}"
+
+    def _semantic_search(self, question: str, *, limit: int) -> tuple[list[SearchCandidate], str]:
+        if self.vector_store is not None and self.embedding_provider is not None:
+            try:
+                matches = self.vector_store.semantic_search(
+                    question,
+                    limit=limit,
+                    embedding_provider=self.embedding_provider,
+                )
+            except Exception:
+                matches = []
+            else:
+                return (
+                    matches,
+                    (
+                        f"{self.vector_store.store_name}:"
+                        f"{self.embedding_provider.provider_name}:"
+                        f"{self.embedding_provider.model_name}"
+                    ),
+                )
+
+        return self.search_engine.semantic_search_with_mode(
+            question,
+            limit=limit,
+            embedding_provider=self.embedding_provider,
+        )

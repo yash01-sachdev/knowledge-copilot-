@@ -5,3 +5,4 @@ httpx
 scikit-learn
 numpy
 python-multipart
+chromadb

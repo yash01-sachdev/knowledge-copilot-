@@ -10,7 +10,8 @@ Knowledge Copilot is a local-first personal knowledge assistant built around a c
 
 - `apps/api`: FastAPI backend
 - `apps/web`: Next.js frontend
-- Local MVP storage: SQLite + FTS5
+- Local note storage: SQLite + FTS5
+- Local vector retrieval: ChromaDB
 - Local semantic fallback: TF-IDF + latent semantic indexing
 - Ollama-backed local embeddings for stronger semantic retrieval
 - Local reranking and grounded answer composition without hosted LLM APIs
@@ -21,7 +22,8 @@ Knowledge Copilot is a local-first personal knowledge assistant built around a c
 - Import `.txt`, `.md`, and `.markdown` files from the UI
 - Sync an entire folder of notes, which is the practical path for phone-authored markdown/text notes
 - Query across notes with hybrid retrieval
-- Switch between lightweight local retrieval and Ollama embeddings without changing the product flow
+- Use Chroma-backed vector retrieval with Ollama embeddings without changing the product flow
+- Fall back to lightweight local retrieval when no embedding provider is configured
 - Show dated citations and why they were selected
 - Surface better phrase-based recurring themes
 - Persist note-to-note links as a reusable memory graph
@@ -93,6 +95,8 @@ npm run dev
 
 By default the backend can stay fully local:
 
+- `KNOWLEDGE_COPILOT_VECTOR_STORE=chroma`
+- `KNOWLEDGE_COPILOT_CHROMA_PATH=./data/chroma`
 - `KNOWLEDGE_COPILOT_EMBEDDING_PROVIDER=local`
 - `KNOWLEDGE_COPILOT_ANSWER_PROVIDER=local`
 - `KNOWLEDGE_COPILOT_RERANKER_PROVIDER=local`
@@ -100,6 +104,8 @@ By default the backend can stay fully local:
 ### Ollama example
 
 ```powershell
+$env:KNOWLEDGE_COPILOT_VECTOR_STORE = "chroma"
+$env:KNOWLEDGE_COPILOT_CHROMA_PATH = "./data/chroma"
 $env:KNOWLEDGE_COPILOT_EMBEDDING_PROVIDER = "ollama"
 $env:KNOWLEDGE_COPILOT_EMBEDDING_MODEL = "nomic-embed-text"
 $env:KNOWLEDGE_COPILOT_RERANKER_PROVIDER = "local"
@@ -113,7 +119,7 @@ That is the recommended fast local mode.
 
 The answer page now shows a beginner-friendly `Run details` panel so you can see:
 
-- which semantic search path ran
+- which semantic search path ran, including `chroma:<provider>:<model>` when the vector index is active
 - whether the reranker stayed local or used a provider
 - which model wrote the final answer
 - how long retrieval, reranking, and generation took
@@ -160,7 +166,7 @@ Use that after starting Ollama. It performs a tiny embedding, reranker, and answ
 
 ## Current architecture note
 
-The current version keeps SQLite for storage and uses a clean provider layer for local retrieval, Ollama embeddings, reranking, and grounded answer generation. That keeps ingestion, retrieval, memory graph generation, and the product flow stable while remaining self-hostable.
+The current version keeps SQLite for notes, metadata, and FTS keyword search, while ChromaDB handles semantic vector retrieval. Ollama generates the embeddings, and the existing reranking and grounded answer flow stay local. That keeps ingestion, retrieval, memory graph generation, and the product flow stable while making the GenAI retrieval layer much easier to explain and deploy.
 
 ## Deployment-ready files
 

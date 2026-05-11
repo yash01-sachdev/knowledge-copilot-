@@ -65,6 +65,7 @@ def _make_settings(tmp_path: Path) -> Settings:
         data_dir=tmp_path,
         database_path=tmp_path / "test.db",
         cors_origins=("http://localhost:3000",),
+        chroma_path=tmp_path / "chroma",
     )
 
 
@@ -92,6 +93,40 @@ def test_service_persists_embeddings_for_chunks(tmp_path: Path) -> None:
     assert stored_chunks[0].embedding is not None
     assert stored_chunks[0].embedding_provider == "fake-embed"
     assert stored_chunks[0].embedding_model == "unit-test"
+
+
+def test_service_uses_chroma_for_semantic_retrieval_when_embeddings_exist(tmp_path: Path) -> None:
+    settings = _make_settings(tmp_path)
+    repository = SQLiteRepository(settings.database_path)
+    service = KnowledgeService(
+        repository,
+        settings,
+        embedding_provider=FakeEmbeddingProvider(),
+    )
+    service.create_note(
+        NoteCreate(
+            title="Momentum reset",
+            content="Momentum comes back faster when I review an old note and pick one task to ship next.",
+            note_date="2026-04-10",
+            source_name="momentum.md",
+        )
+    )
+    service.create_note(
+        NoteCreate(
+            title="Workout planning",
+            content="Heavy lifts and progressive overload matter when the goal is training consistency.",
+            note_date="2026-04-11",
+            source_name="workout.md",
+        )
+    )
+
+    response, diagnostics = service.answer_question_with_diagnostics(
+        QueryRequest(question="How do I recover momentum?", top_k=3, mode="fast")
+    )
+
+    assert response.citations
+    assert response.citations[0].title == "Momentum reset"
+    assert diagnostics.semantic_mode == "chroma:fake-embed:unit-test"
 
 
 def test_service_uses_answer_provider_for_grounded_queries(tmp_path: Path) -> None:

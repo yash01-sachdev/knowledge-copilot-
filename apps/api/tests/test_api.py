@@ -12,6 +12,7 @@ def make_client(tmp_path: Path) -> TestClient:
         data_dir=tmp_path,
         database_path=tmp_path / "test.db",
         cors_origins=("http://localhost:3000",),
+        chroma_path=tmp_path / "chroma",
     )
     app = create_app(settings)
     return TestClient(app)

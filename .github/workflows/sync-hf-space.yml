@@ -1,0 +1,47 @@
+name: Sync Hugging Face Space
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/sync-hf-space.yml"
+      - "apps/api/**"
+      - "deploy/hf-space-api/**"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required configuration
+        run: |
+          if [ -z "${{ secrets.HF_TOKEN }}" ]; then
+            echo "Missing HF_TOKEN GitHub secret."
+            exit 1
+          fi
+          if [ -z "${{ vars.HF_SPACE_REPO_ID }}" ]; then
+            echo "Missing HF_SPACE_REPO_ID GitHub repository variable."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Prepare Space bundle
+        run: |
+          rm -rf .hf-space-build
+          mkdir -p .hf-space-build
+          cp deploy/hf-space-api/README.md .hf-space-build/README.md
+          cp deploy/hf-space-api/Dockerfile .hf-space-build/Dockerfile
+          cp deploy/hf-space-api/start.sh .hf-space-build/start.sh
+          cp apps/api/requirements.txt .hf-space-build/requirements.txt
+          cp -R apps/api/app .hf-space-build/app
+          chmod +x .hf-space-build/start.sh
+
+      - uses: huggingface/hub-sync@v0.1.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: ${{ vars.HF_SPACE_REPO_ID }}
+          hf_token: ${{ secrets.HF_TOKEN }}
+          space_sdk: docker
+          subdirectory: .hf-space-build
